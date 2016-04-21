@@ -21,13 +21,19 @@ class Island(object):
 
     def send_status(self, receiver):
         '''
-        send the status of this island (alive, currently eovlving, ready to migrate, etc.
+        Send the status of this island (alive, currently eovlving, ready to migrate, etc.
         to the indicated recipient
+
+        :param receiver: The mid of the machine to which the status is sent
+        :return: Success or failure of the send
         '''
         pass
 
     def get_status(self, destination):
         '''
-        get the status of the destination island
+        Get the status of the destination island
+
+        :param destination: The mid of the machine whose status to get
+        :return: Success or failure of the get
         '''
         pass
