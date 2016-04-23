@@ -1,44 +1,14 @@
 import socket
 import json
 from enum import Enum
+from message import *
 
 '''
 getstatus/sendstatus
 test timeouts
 ballot for starting migration -- check quorums
 ballot for migration agents
-
-Protocol:
-
-    All messages are json:
-
-        mid: sender
-        protocol version:
-        action:
-        args:
-        kwargs:
 '''
-
-class Action(Enum):
-    GETSTATUS = 0
-    SENDSTATUS = 1
-    '''
-    TODO
-    SEND_START_MIGRATION = 2
-    ACCEPT_START_MIGRATION = 3
-    '''
-
-def create_msg(mid, action, *args, **kwargs):
-    return json.dumps({
-        'mid': mid,
-        'version': 0,
-        'action': action,
-        'args': args,
-        'kwargs': kwargs
-    })
-    
-def decode_msg(msg):
-    return json.loads(msg)
 
 class Island(object):
     def __init__(mid, my_agents, all_agents, mid_to_ports):
@@ -81,7 +51,15 @@ class Island(object):
         :param receiver: The mid of the machine to which the status is sent
         :return: Success or failure of the send
         '''
-        pass
+
+        # listen for a GetStatus message
+        # pretty sure this doesn't work
+        resp = recv_msg(MsgLen.GETSTATUS)
+        resp_dict = decode_msg(resp)
+
+        # create a status message and send to the requester
+        msg = create_msg(self.mid, Action.SENDSTATUS)#add stuff to this
+        send_msg(msg, self.mid_to_sockets[resp_dict['mid']])
 
     def get_status(self, destination):
         '''
@@ -92,8 +70,14 @@ class Island(object):
         '''
 
         msg = create_msg(self.mid, Action.GETSTATUS)
-        self.mid_to_sockets[destination].send(msg)
-        pass
+        try:
+            send_msg(msg, len(msg))
+            # pretty sure this doesn't work
+            resp = recv_msg(MsgLen.SENDSTATUS)#len of status msg here
+        except RuntimeError as e:
+            #?
+            pass
+        
 
     def send_start_migration_ballot(self):
         '''
