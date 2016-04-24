@@ -1,3 +1,7 @@
+from enum import Enum
+import struct
+import json
+import sys
 '''
 Protocol:
 
@@ -12,16 +16,7 @@ Protocol:
 
 class Action(Enum):
     GETSTATUS = 0
-    SENDSTATUS = 1
-    '''
-    TODO
-    SEND_START_MIGRATION = 2
-    ACCEPT_START_MIGRATION = 3
-    '''
-
-class MsgLen():
-    GETSTATUS = 1#size here
-    SENDSTATUS = 0#size here
+    REPLYSTATUS = 1
     '''
     TODO
     SEND_START_MIGRATION = 2
@@ -32,37 +27,52 @@ def create_msg(mid, action, *args, **kwargs):
     return json.dumps({
         'mid': mid,
         'version': 0,
-        'action': action,
+        'action': action.value,
         'args': args,
         'kwargs': kwargs
     })
     
 def decode_msg(msg):
-    return json.loads(msg)
+    ret = json.loads(msg)
+    ret['action'] = Action(ret['action'])
+    return ret
 
-def send_msg(msg, dest):
+def send_msg(socket, msg):
     '''
+    :param socket: destination socket 
     :param msg: string msg to send to the recipient
-    :param dest: destination socket 
     :return: message (string)
     '''
+    msg = struct.pack('<L', len(msg)) + msg
     msg_len = len(msg)
     totalsent = 0
     while totalsent < msg_len:
-        sent = dest.send(msg[totalsent:])
+        sent = socket.send(msg[totalsent:])
         if sent == 0:
             raise RuntimeError("socket connection broken")
         totalsent += sent
 
-def recv_msg(msg_len):
+def recv_msg(socket):
     '''
-    :param msg_len: MsgLen object that tells how long the received msg should be
+    :param socket: socket from which to receive
     :return: message (string)
     '''
+    m = ''
+    m_len = 0
+    while m_len < 4:
+        chunk = socket.recv(2048)
+        if chunk == '':
+            raise RuntimeError('Socket connection error')
+        m += chunk
+        m_len += len(chunk)
+
+    msg_len, = struct.unpack('<L', m[:4])
+
     chunks = []
-    bytes_recd = 0
-    while bytes_recd < MSGLEN:
-        chunk = self.sock.recv(min(MSGLEN - bytes_recd, 2048))
+    chunks.append(m[4:])
+    bytes_recd = len(m[4:])
+    while bytes_recd < msg_len:
+        chunk = socket.recv(2048)
         if chunk == '':
             raise RuntimeError("socket connection broken")
         chunks.append(chunk)
