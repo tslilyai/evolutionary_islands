@@ -1,13 +1,14 @@
-# evolutionary_islands
-CS262 Final Project: Distributed Scheduling for Evolutionary Island Algorithms
+# Evolutionary Islands
+CS262 Final Project: Distributed System for Evolutionary Island Algorithms
 
+##Overview
+high-level description here
 
-Protocol:
+##Usage
 
-    All messages are json:
+##Island Class
+Any class that inherits from Island must override the `run_epoch` function.
 
-        mid: sender
-        protocol version:
-        action:
-        args:
-        kwargs:
+##Agent Class
+Any class that implements the Agent class should provide a way to get
+an agent's genotype and agent ID, and a way to instantiate the agent.
