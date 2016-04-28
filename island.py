@@ -10,29 +10,33 @@ import os
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
 
-from paxos.practical import Messenger
-
 from threading import Lock
 
 class Agent(object):
-    def __init__(self, value):
-        self.value = value
+    '''
+    An Agent object is evolved by the Island.
+    This class provides the interface that can be implemented
+    for specific evolutionary algorithm agent representations (i.e.
+    a Neural Network or a value)
+    '''
+    
+    def __init__(self):
+        ''' initialize the agent '''
+        raise NotImplemented 
 
-    def __lt__(self, other):
-        return self.value < other.value
-
-    def __gt__(self, other):
-        return self.value > other.value
-
-
-'''
-getstatus/sendstatus
-test timeouts
-ballot for starting migration -- check quorums
-ballot for migration agents
-'''
+    def get_genotype(self):
+        '''
+        Returns the ID and genes of the agent (e.g. 
+        agent ID and Neural net parameter weights,
+        or agent ID and agent characteristics/value).
+        '''
+        raise NotImplemented
 
 class IslandStatus(Enum):
+    '''
+    IslandStatus defines the different states 
+    in which an island can be in.
+    '''
     EVOLUTION = 0
     EVOLUTION_DONE = 1
     MIGRATION_READY = 2
@@ -40,6 +44,12 @@ class IslandStatus(Enum):
     IDLE = 4
 
 class Island(object):
+    '''
+    An Island object defines an evolutionary island that
+    evolves a subset of the global agent population and
+    participates in migrations
+    '''
+
     def __init__(self, mid, my_agents, all_agents, mid_to_ports):
         '''
         Initializes a machine which represents an evolutionary island 
@@ -102,10 +112,28 @@ class Island(object):
         return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
     def get_all_agents(self):
-        # at every migration, get all agents from live machines
+        '''
+        Queries all machines for the current list of all agents
+        '''
+        # XXX do we actually need this? if we already have all agents from the 
+        # status msgs when we start the migration
         pass
 
     def run(self): 
+        '''
+        Runs the island main loop (until the island crashes).
+        This loop does the following actions:
+            1. run several epochs of evolution
+            2. randomly shuffle the evolved agents in this machine's population
+            3. while the machine is not participating in a migration:
+                - poll for the status and evolved agents of every other machine
+                - send a new_migration ballot, with the proposal including all machines
+                    which will participate in this ballot
+
+        Note that the listener thread may cause the machine to begin migration if
+        1) the machine's ballot is proposed and accepted by a quorum, or 2) the 
+        machine itself participates in another machine's proposed migration.
+        '''
         while(True):
             self.status = IslandStatus.EVOLUTION
             for _ in range(self.num_epochs):
@@ -122,6 +150,7 @@ class Island(object):
             with self.socket_lock:
                 mids = self.mid_to_sockets.keys()
 
+            # XXX we never actually set status to migration?
             while self.status != IslandStatus.MIGRATION:
                 numresponses = 0
                 for mid in mids:
@@ -135,7 +164,7 @@ class Island(object):
                 done = True
                 with self.socket_lock:
                     for mid in self.mid_to_sockets:
-                        if mid not mid_to_agents:
+                        if mid not in mid_to_agents:
                             done = False
                             break
                     for mid in mid_to_agents:
@@ -144,6 +173,8 @@ class Island(object):
 
                 if done or numresponses == 0:
                     # Start Paxos Ballot to start migration
+                    # XXX how are we going to decide what a quorum is, when
+                    # machines may be failing all over the place?
                     self.status = IslandStatus.MIGRATION_READY
                     self.paxos_proposer.set_proposal(mid_to_agents.keys())
                     self.paxos_proposer.prepare()
@@ -155,11 +186,18 @@ class Island(object):
 
 
     def run_epoch(self):
-        time.sleep(1.0 + random.randint(0, 100)/100.0)
+        '''
+        Function to run one epoch of evolution.
+        Should be overridden to suit the purposes of whichever
+        evolutionary algorithm is being run
+        '''
+        raise NotImplemented
 
     def run_migration(self):
-        # permute list
-        # send list to all participating migration islands
+        '''
+        Runs the migration process
+        '''
+        # TODO
         time.sleep(1.0 + random.randint(0, 200)/100.0)
 
     def get_status(self, destination):
@@ -172,28 +210,25 @@ class Island(object):
 
         resp = self.rpc_call(destination, Action.GETSTATUS)
         if resp is not None:
-            return IslandStatus(resp['status']), [Agent(i) for i in resp['agents']]
+            # return the AID and genotype of the Agent for the recipient island machine 
+            # to store and potentially evolve
+            return IslandStatus(resp['status']), [Agent.get_genotype() for i in resp['agents']]
         return None, []
 
-    def send_start_migration_ballot(self):
-        '''
-        Quorum (majority) need to agree to start this migration
-        '''
-        pass
-
-    def accept_migration_and_send_agents(self):
-        '''
-        send back list of begin agents
-        '''
-        pass
-
-    def send_migration_agents_ballot(self):
-        pass
-
-    def accept_migration_agents_ballot(self):
-        pass
-
     def rpc_call(self, destination, action, *args, **kwargs):
+        '''
+        Sends (using the protocol specified in message.py) a message to
+        the specified destination machine.
+
+        If the send times out, the other machine is considered as having failed,
+        and the socket to that machine closed.
+
+        :param destination: MID to which to send the message
+        :param action: action of this message (message type, i.e. GETSTATUS)
+        :param args: arguments to the message
+        :param kwargs: additional (dict-type) arguments to the message
+        :return: decoded response to the message
+        '''
         msg = create_msg(self.mid, action)
         print 'Machine #%d: Action %s sent to %d' % (self.mid, action.name, destination)
         try:
@@ -205,15 +240,6 @@ class Island(object):
             send_msg(socket, msg)
             resp = recv_msg(socket)
             return decode_msg(resp)
-        # except socket.timeout as e:
-        #     with self.socket_lock:
-        #         try:
-        #             self.mid_to_sockets[destination].shutdown(socket.SHUT_RDWR)
-        #             self.mid_to_sockets[destination].close()
-        #         except Exception:
-        #             pass
-        #         del self.mid_to_sockets[destination]
-        #         print 'Machine #%d: I think machine %d died' % (self.mid, destination)
         except RuntimeError as e:
             with self.socket_lock:
                 try:
@@ -227,6 +253,13 @@ class Island(object):
         return None
 
     def connect(self, mid_to_ports):
+        '''
+        Sets up sockets and connects to all other machines.
+
+        :param mid_to_ports: dictionary mapping a machine's ID to a (host, port) address
+                             upon which the machine listens to requests
+        :return: None
+        '''
         self.mid_to_sockets[self.mid] = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.mid_to_sockets[self.mid].setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.mid_to_sockets[self.mid].bind(mid_to_ports[self.mid])
@@ -244,6 +277,12 @@ class Island(object):
                 self.mid_to_sockets[mid].settimeout(1)
 
     def listen(self):
+        '''
+        loop() sets up the listening socket from other machines
+
+        process() listens for incoming requests from other machines and 
+        handles msgs accordingly by passing them to their corresponding handlers.
+        '''
         def process(sock):
             try:
                 while True:
@@ -279,5 +318,3 @@ class Island(object):
                 ct = thread.start_new_thread(process, (clientsocket,))
 
         thread.start_new_thread(loop, ())
-
-

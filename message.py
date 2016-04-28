@@ -2,19 +2,28 @@ from enum import Enum
 import struct
 import json
 import sys
+
+from paxos.practical import Messenger
+
 '''
-Protocol:
+message.py implements the message-sending protocol and functionality of our system.
 
-    All messages are json:
-
+The protocol encodes all messages as JSON with the following structure:
         mid: sender
         protocol version:
         action:
         args:
         kwargs:
+
+Also included in this file is the definition of the PaxosMessenger class,
+which allows machines to send ballots and reach consensus.
 '''
 
 class Action(Enum):
+    ''' 
+    Action specifies the type of messages/actions a machine
+    is allowed to send.
+    '''
     GETSTATUS = 0
     REPLYSTATUS = 1
     # Paxos actions
@@ -24,13 +33,18 @@ class Action(Enum):
     SEND_PROMISE = 5
     SEND_ACCEPT = 6
     SEND_ACCEPTED = 7
-    '''
-    TODO
-    SEND_START_MIGRATION = 2
-    ACCEPT_START_MIGRATION = 3
-    '''
 
 def create_msg(mid, action, *args, **kwargs):
+    '''
+    Returns a json-encoded message object that follows
+    the protocol specified above.
+
+    :param mid: MID to which to send the message
+    :param action: action of this message (message type, i.e. GETSTATUS)
+    :param args: arguments to the message
+    :param kwargs: additional (dict-type) arguments to the message
+    :return: json-encoded message
+    '''
     return json.dumps({
         'mid': mid,
         'version': 0,
@@ -40,12 +54,21 @@ def create_msg(mid, action, *args, **kwargs):
     })
     
 def decode_msg(msg):
+    '''
+    Decodes a json-encoded message that follows the 
+    protocol specified above
+
+    :param msg: json-encoded message string
+    :return: json-decoded message
+    '''
     ret = json.loads(msg)
     ret['action'] = Action(ret['action'])
     return ret
 
 def send_msg(socket, msg):
     '''
+    Sends a message to the destination socket.
+
     :param socket: destination socket 
     :param msg: string msg to send to the recipient
     :return: message (string)
@@ -61,6 +84,8 @@ def send_msg(socket, msg):
 
 def recv_msg(socket):
     '''
+    Recieves a message from the sending socket
+
     :param socket: socket from which to receive
     :return: message (string)
     '''
@@ -87,7 +112,6 @@ def recv_msg(socket):
     return ''.join(chunks)
 
 class PaxosMessenger(Messenger):
-
     def __init__(self, mid, mid_to_sockets):
         self.mid = mid
         self.mid_to_sockets = mid_to_sockets
@@ -121,4 +145,3 @@ class PaxosMessenger(Messenger):
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(msg, self.mid_to_sockets[to_uid])
-
