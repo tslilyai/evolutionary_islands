@@ -75,6 +75,7 @@ class Island(object):
         self.shuffled_agents = None
 
         self.socket_lock = Lock()
+        self.status_lock = Lock()
         self.ready_for_migration = False
         self.migration_id = 0
         self.migration_participants = []
@@ -110,8 +111,10 @@ class Island(object):
         :return: Success or failure of the send
         '''
         agents = []
-        if self.status == IslandStatus.EVOLUTION_DONE:
-            agents = [a.get_genotype() for a in self.shuffled_agents]
+
+        with self.status_lock:
+            if self.status == IslandStatus.EVOLUTION_DONE:
+                agents = [a.get_genotype() for a in self.shuffled_agents]
 
         return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
@@ -128,7 +131,26 @@ class Island(object):
         self.paxos_node.recv_accept_request(kwargs['from_uid'], kwargs['proposal_id'], kwargs['value'])
 
     def promise_handler(self, msg):
+        '''
+        promise_handler sends a promise to run this migration if 
+            1) the island is in the list of proposed islands and
+            2) the island has heard back from all the proposed islands
+        '''
         kwargs = msg['kwargs']
+
+        # if the island is not included in the list of participating islands,
+        # the island cannot promise to participate...
+        if self.mid not in kwargs['prev_accepted_value']:
+            return
+        # if this island has not heard back from all islands in the proposed migration, 
+        # it cannot promise to run the migration
+        for island in kwargs['prev_accepted_value']:
+            if island not in self.mid_to_agents:
+                return
+
+        with self.status_lock:
+            self.status = IslandStatus.MIGRATION
+
         self.paxos_node.recv_promise(kwargs['from_uid'], kwargs['proposal_id'], kwargs['prev_accepted_id'],
                                      kwargs['prev_accepted_value'])
 
@@ -156,7 +178,8 @@ class Island(object):
         machine itself participates in another machine's proposed migration.
         '''
         while(True):
-            self.status = IslandStatus.EVOLUTION
+            with self.status_lock:
+                self.status = IslandStatus.EVOLUTION
             for _ in range(self.num_epochs):
                 self.run_epoch()
 
@@ -165,42 +188,47 @@ class Island(object):
 
             self.shuffled_agents = agents
 
-            mid_to_agents = {self.mid: self.shuffled_agents}
-            self.status = IslandStatus.EVOLUTION_DONE
+            self.mid_to_agents = {self.mid: self.shuffled_agents}
+            with self.status_lock:
+                self.status = IslandStatus.EVOLUTION_DONE
 
             with self.socket_lock:
                 mids = self.mid_to_sockets.keys()
 
-            while self.status != IslandStatus.MIGRATION:
-                numresponses = 0
-                for mid in mids:
-                    if mid != self.mid and mid not in mid_to_agents:
-                        status, agents = self.get_status(mid)
-                        if status is not None and agents:
-                            mid_to_agents[mid] = agents
-                        if status is not None:
-                            numresponses += 1
+            while status != IslandStatus.MIGRATION:
+                with self.status_lock:
+                    status = self.status
+                    if status == IslandStatus.MIGRATION:
+                        break
+                    numresponses = 0
+                    for mid in mids:
+                        if mid != self.mid and mid not in self.mid_to_agents:
+                            status, agents = self.get_status(mid)
+                            if status is not None and agents:
+                                self.mid_to_agents[mid] = agents
+                            if status is not None:
+                                numresponses += 1
 
-                done = True
-                with self.socket_lock:
-                    for mid in self.mid_to_sockets:
-                        if mid not in mid_to_agents:
-                            done = False
-                            break
-                    for mid in mid_to_agents:
-                        if mid not in self.mid_to_sockets:
-                            del mid_to_agents[mid]
+                    done = True
+                    with self.socket_lock:
+                        for mid in self.mid_to_sockets:
+                            if mid not in self.mid_to_agents:
+                                done = False
+                                break
+                        for mid in self.mid_to_agents:
+                            if mid not in self.mid_to_sockets:
+                                del self.mid_to_agents[mid]
 
-                if done or numresponses == 0:
-                    # Start Paxos Ballot to start migration
-                    self.status = IslandStatus.MIGRATION_READY
-                    self.paxos_node.set_proposal(mid_to_agents.keys())
-                    self.paxos_node.prepare()
+                    if done or numresponses == 0:
+                        # Start Paxos Ballot to start migration
+                        self.status = IslandStatus.MIGRATION_READY
+                        self.paxos_node.set_proposal(mid_to_agents.keys())
+                        self.paxos_node.prepare()
 
-                    time.sleep(4)
+                        time.sleep(4)
 
-                    if not done:
-                        self.status = IslandStatus.EVOLUTION_DONE
+                        if not done:
+                            self.status = IslandStatus.EVOLUTION_DONE
 
                 time.sleep(4)
 
