@@ -11,8 +11,13 @@ import os
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
 
-from paxos.practical import Node
+from paxos.practical import Node, ProposalID
 from threading import Lock
+
+def mk_proposal_id(l):
+    if l is None:
+        return l
+    return ProposalID(l[0], l[1])
 
 class Agent(object):
     '''
@@ -117,10 +122,14 @@ class Island(object):
         kwargs['migration_id'] = self.migration_id
         return create_msg(self.mid, action, *args, **kwargs)
 
-    def dprint(self, fmt, *args):
+    def dprint(self, fmt, *args, **kwargs):
+        colors = ['\033[32m', '\033[33m', '\033[34m', '\033[35m]', '\033[36m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m']
         _, fname, lineno, funcname, _, _ = inspect.getouterframes(inspect.currentframe())[1]
         fname = os.path.basename(fname)
-        print ('%.3f [Machine %d] [Called from %s (%s:%d)]' % (time.time(), self.mid, funcname, fname, lineno)) + (fmt % args)
+        color = colors[self.mid % len(colors)] if 'critical' not in kwargs else '\033[31m'
+        print (('%s%s [Machine %d (%s)] [%s (%s:%d)]\033[00m ' %
+                (color, time.strftime('%H:%M:%S'), self.mid, self.status, funcname, fname, lineno))
+               + (fmt % args))
         sys.stdout.flush()
 
     def prepare_migrate(self):
@@ -149,7 +158,7 @@ class Island(object):
         agents = []
 
         with self.status_lock:
-            if self.status == IslandStatus.EVOLUTION_DONE:
+            if self.status == IslandStatus.EVOLUTION_DONE or self.status == IslandStatus.MIGRATION_READY:
                 agents = [a.get_genotype() for a in self.shuffled_agents]
 
         return self.create_msg(Action.REPLYSTATUS, status=self.status.value, agents=agents)
@@ -170,13 +179,15 @@ class Island(object):
         # the island cannot promise to participate...
         if self.mid not in kwargs['proposal_value']:
             return
+        self.dprint("mid is in proposal value")
         # if this island has not heard back from all islands in the proposed migration, 
         # it cannot promise to run the migration
         for island in kwargs['proposal_value']:
             if island not in self.mid_to_agents:
+                self.dprint("%d not in mid_to_agents (%s)", island, self.mid_to_agents)
                 return
 
-        self.paxos_node.recv_prepare(kwargs['from_uid'], kwargs['proposal_id'], kwargs['proposal_value'])
+        self.paxos_node.recv_prepare(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
 
     def accepted_handler(self, msg):
         '''
@@ -187,7 +198,7 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
-        self.paxos_node.recv_accepted(kwargs['from_uid'], kwargs['proposal_id'], kwargs['accepted_value'])
+        self.paxos_node.recv_accepted(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['accepted_value'])
         if self.mid in kwargs['accepted_value']:
             self.prepare_migrate()
 
@@ -200,8 +211,8 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
-        self.paxos_node.recv_accept_request(kwargs['from_uid'], kwargs['proposal_id'], kwargs['value'])
-        if self.mid in kwargs['value']:
+        self.paxos_node.recv_accept_request(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
+        if self.mid in kwargs['proposal_value']:
             self.prepare_migrate()
 
     def promise_handler(self, msg):
@@ -214,7 +225,9 @@ class Island(object):
         '''
         kwargs = msg['kwargs']
 
-        self.paxos_node.recv_promise(kwargs['from_uid'], kwargs['proposal_id'], kwargs['prev_accepted_id'],
+        self.dprint('%s', kwargs)
+        self.dprint('quorum_size = %d', self.paxos_node.quorum_size)
+        self.paxos_node.recv_promise(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), mk_proposal_id(kwargs['prev_accepted_id']),
                                      kwargs['prev_accepted_value'])
 
     def prepare_nack_handler(self, msg):
@@ -226,7 +239,7 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
-        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
+        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), mk_proposal_id(kwargs['promised_id']))
 
     def accept_nack_handler(self, msg):
         '''
@@ -237,7 +250,7 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
-        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
+        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), mk_proposal_id(kwargs['promised_id']))
 
     def run(self): 
         '''
@@ -273,57 +286,59 @@ class Island(object):
                 mids = self.mid_to_sockets.keys()
 
             while self.status != IslandStatus.MIGRATION:
-                with self.status_lock:
-                    status = self.status
-                    numresponses = 0
-                    for mid in mids:
+                numresponses = 0
+                for mid in mids:
+                    if self.status == IslandStatus.MIGRATION:
+                        break
+                    if mid != self.mid and mid not in self.mid_to_agents:
+                        status, agents = self.get_status(mid)
+                        if status is not None and agents:
+                            self.mid_to_agents[mid] = agents
+                        if status is not None:
+                            numresponses += 1
+
+                done = True
+                if self.status == IslandStatus.MIGRATION:
+                    break
+
+                with self.socket_lock:
+                    # check to see if we've heard back from all islands
+                    for mid in self.mid_to_sockets:
+                        if mid not in self.mid_to_agents:
+                            done = False
+                            break
+                    # check to see if an island has died in the time since we've
+                    # heard from the island
+                    mid_to_agents = self.mid_to_agents
+                    for mid in mid_to_agents:
+                        if mid not in self.mid_to_sockets:
+                            del self.mid_to_agents[mid]
+
+
+                if done or numresponses == 0:
+                    self.dprint("Heard back from everyone")
+                    with self.status_lock:
                         if self.status == IslandStatus.MIGRATION:
                             break
-                        if mid != self.mid and mid not in self.mid_to_agents:
-                            status, agents = self.get_status(mid)
-                            if status is not None and agents:
-                                self.mid_to_agents[mid] = agents
-                            if status is not None:
-                                numresponses += 1
-
-                    done = True
-                    if self.status == IslandStatus.MIGRATION:
-                        break
-                    with self.socket_lock:
-                        # check to see if we've heard back from all islands
-                        for mid in self.mid_to_sockets:
-                            if mid not in self.mid_to_agents:
-                                done = False
-                                break
-                        # check to see if an island has died in the time since we've
-                        # heard from the island
-                        mid_to_agents = self.mid_to_agents
-                        for mid in mid_to_agents:
-                            if mid not in self.mid_to_sockets:
-                                del self.mid_to_agents[mid]
-
-                    if self.status == IslandStatus.MIGRATION:
-                        break
-
-                    if done or numresponses == 0:
                         # Start Paxos Ballot to start migration
                         self.status = IslandStatus.MIGRATION_READY
-                        time.sleep(1)
-                        if self.status == IslandStatus.MIGRATION:
-                            break
-                        self.proposed_value = None
-                        self.paxos_node.set_proposal(mid_to_agents.keys())
-                        self.paxos_node.prepare()
+                    self.proposed_value = None
+                    self.paxos_node.set_proposal(mid_to_agents.keys())
+                    self.paxos_node.change_quorum_size(len(mid_to_agents.keys())-1)
+                    self.dprint("Preparing proposal")
+                    self.paxos_node.prepare()
 
-                        time.sleep(4)
+                    time.sleep(2)
 
-                        if self.status == IslandStatus.MIGRATION:
-                            break
-
-                        if not done:
-                            self.status = IslandStatus.EVOLUTION_DONE
+                    if self.status == IslandStatus.MIGRATION:
+                        break
 
                 time.sleep(4)
+                with self.status_lock:
+                    if self.status == IslandStatus.MIGRATION:
+                        break
+                    if not done:
+                        self.status = IslandStatus.EVOLUTION_DONE
 
             assert self.status == IslandStatus.MIGRATION
             # self.migration_participants is a list of islands that have ratified paxos proposal
@@ -396,7 +411,11 @@ class Island(object):
 
             send_msg(sock, msg)
             resp = recv_msg(sock)
-            return decode_msg(resp)
+            try:
+                return decode_msg(resp)
+            except ValueError as e:
+                self.dprint(resp)
+                raise e
         except socket.timeout:
             return None
         except RuntimeError as e:
@@ -427,7 +446,7 @@ class Island(object):
         self.mid_to_sockets[self.mid].settimeout(None)
         self.listen()
         self.dprint('Created server')
-        time.sleep(1.0)
+        time.sleep(0.5)
         for mid in mid_to_ports:
             if mid != self.mid:
                 self.mid_to_sockets[mid] = socket.socket(socket.AF_INET,socket.SOCK_STREAM)

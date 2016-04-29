@@ -124,14 +124,13 @@ class Acceptor (object):
         '''
         Called when a Prepare message is received from a Proposer
         '''
-        if self.acceptor_id in proposal_values:
-            if proposal_id == self.promised_id:
-                # Duplicate prepare message
-                self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
-            
-            elif proposal_id > self.promised_id:
-                self.promised_id = proposal_id
-                self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
+        if proposal_id == self.promised_id:
+            # Duplicate prepare message
+            self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
+        
+        elif proposal_id > self.promised_id:
+            self.promised_id = proposal_id
+            self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
 
                     
     def recv_accept_request(self, from_uid, proposal_id, value):

@@ -142,7 +142,7 @@ class Proposer (essential.Proposer):
             if prev_accepted_value is not None:
                 self.proposed_value = prev_accepted_value
 
-        if len(self.promises_rcvd) == self.quorum_size:
+        if len(self.promises_rcvd) >= self.quorum_size:
             self.leader = True
 
             self.messenger.on_leadership_acquired()
@@ -198,22 +198,21 @@ class Acceptor (essential.Acceptor):
         Called when a Prepare message is received from the network
         '''
 
-        if self.acceptor_uid in proposal_value:
-            if proposal_id == self.promised_id:
-                # Duplicate prepare message. No change in state is necessary so the response
-                # may be sent immediately
+        if proposal_id == self.promised_id:
+            # Duplicate prepare message. No change in state is necessary so the response
+            # may be sent immediately
+            if self.active:
+                self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
+        
+        elif proposal_id > self.promised_id:
+            if self.pending_promise is None:
+                self.promised_id = proposal_id
                 if self.active:
-                    self.messenger.send_promise(from_uid, proposal_id, self.accepted_id, self.accepted_value)
-            
-            elif proposal_id > self.promised_id:
-                if self.pending_promise is None:
-                    self.promised_id = proposal_id
-                    if self.active:
-                        self.pending_promise = from_uid
+                    self.pending_promise = from_uid
 
-            else:
-                if self.active:
-                    self.messenger.send_prepare_nack(from_uid, proposal_id, self.promised_id)
+        else:
+            if self.active:
+                self.messenger.send_prepare_nack(from_uid, proposal_id, self.promised_id)
 
                     
     def recv_accept_request(self, from_uid, proposal_id, value):
@@ -321,7 +320,7 @@ class Learner (essential.Learner):
             
 
     
-class Node (Proposer, Acceptor, Learner):
+class Node (Proposer, essential.Acceptor, Learner):
     '''
     This class supports the common model where each node on a network preforms
     all three Paxos roles, Proposer, Acceptor, and Learner.
