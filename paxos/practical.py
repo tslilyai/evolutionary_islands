@@ -345,8 +345,8 @@ class Node (Proposer, Acceptor, Learner):
         self.quorum_size = quorum_size
 
         
-    def recv_prepare(self, from_uid, proposal_id):
+    def recv_prepare(self, from_uid, proposal_id, proposal_value):
         self.observe_proposal( from_uid, proposal_id )
-        return super(Node,self).recv_prepare( from_uid, proposal_id )
+        return super(Node,self).recv_prepare( from_uid, proposal_id, proposal_value)
 
 
