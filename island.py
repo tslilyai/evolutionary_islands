@@ -202,12 +202,16 @@ class Island(object):
 
     def run_migration(self):
         '''
-        Runs the migration process
+        Runs the migration process by assigning this island 
+        every multiple of n agents plus the island's position in the migration
+        participants list.
+        n is the number of participating islands
         '''
         self.my_agents = []
         my_index = self.migration_participants.sort().index(self.mid)
+        num_participants = len(self.migration_participants)
         for i, agent in enumerate(self.all_agents):
-            if i % my_index == 0:
+            if (i-my_index) % num_participants == 0:
                 self.my_agents.append(agent)
 
     def get_status(self, destination):
