@@ -300,14 +300,16 @@ class Island(object):
         msg = create_msg(self.mid, action)
         print 'Machine #%d: Action %s sent to %d' % (self.mid, action.name, destination)
         try:
-            socket = None
+            sock = None
             with self.socket_lock:
                 if destination in self.mid_to_sockets:
-                    socket = self.mid_to_sockets[destination]
+                    sock = self.mid_to_sockets[destination]
 
-            send_msg(socket, msg)
-            resp = recv_msg(socket)
+            send_msg(sock, msg)
+            resp = recv_msg(sock)
             return decode_msg(resp)
+        except socket.timeout:
+            return None
         except RuntimeError as e:
             with self.socket_lock:
                 try:
