@@ -331,12 +331,12 @@ class Island(object):
 
 
                 if done or numresponses == 0:
-                    self.dprint("Heard back from everyone")
+                    self.dprint("Got everyone's status")
                     with self.status_lock:
                         if self.status == IslandStatus.MIGRATION:
                             break
-                        # Start Paxos Ballot to start migration
                         self.status = IslandStatus.MIGRATION_READY
+                    # Start Paxos Ballot to start migration
                     self.proposed_value = None
                     self.paxos_node.set_proposal(mid_to_agents.keys())
                     self.paxos_node.change_quorum_size(max(len(mid_to_agents.keys())-1, 
@@ -469,8 +469,8 @@ class Island(object):
             if mid != self.mid:
                 self.mid_to_sockets[mid] = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
                 self.mid_to_sockets[mid].connect(mid_to_ports[mid])
-                # Set a timeout for 1 second
-                self.mid_to_sockets[mid].settimeout(1)
+                # Set a timeout for 2 seconds
+                self.mid_to_sockets[mid].settimeout(2)
 
     def listen(self):
         '''
@@ -492,7 +492,7 @@ class Island(object):
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
-                    if self.status == IslandStatus.MIGRATION_READY:
+                    if self.status == IslandStatus.MIGRATION_READY or self.status == IslandStatus.EVOLUTION_DONE:
                         if msg['action'] == Action.SEND_PREPARE_NACK:
                             response = self.prepare_nack_handler(msg)
                         elif msg['action'] == Action.SEND_ACCEPT_NACK:
