@@ -339,7 +339,8 @@ class Island(object):
                         self.status = IslandStatus.MIGRATION_READY
                     self.proposed_value = None
                     self.paxos_node.set_proposal(mid_to_agents.keys())
-                    self.paxos_node.change_quorum_size(len(mid_to_agents.keys())-1)
+                    self.paxos_node.change_quorum_size(max(len(mid_to_agents.keys())-1, 
+                                                            self.paxos_node.quorum_size))
                     self.dprint("Preparing proposal")
                     self.paxos_node.prepare()
 
