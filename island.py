@@ -10,7 +10,7 @@ import os
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
 
-from paxos.practical import Proposer
+from paxos.practical import Node
 from threading import Lock
 
 class Agent(object):
@@ -81,10 +81,7 @@ class Island(object):
 
         # This island abides by the Paxos protocol
         self.paxos_messenger = PaxosMessenger(self.mid, self.mid_to_sockets) 
-        self.paxos_proposer = Proposer()
-        self.paxos_proposer.proposer_id = self.mid
-        self.paxos_proposer.messenger = self.paxos_messenger
-        self.paxos_proposer.quorum_size = len(self.mid_to_sockets)/2 + 1
+        self.paxos_node = Node(self.paxos_messenger, self.mid, len(self.mid_to_sockets)/2 + 1)
 
         print 'Machine #%d: Done Initializing' % self.mid
 
@@ -116,8 +113,30 @@ class Island(object):
 
         return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
-    def get_prepare_handler(self, msg):
-        pass
+    def prepare_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_prepare(kwargs['from_uid'], kwargs['proposal_id'])
+
+    def accepted_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_accepted(kwargs['from_uid'], kwargs['proposal_id'], kwargs['accepted_value'])
+
+    def accept_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_accept_request(kwargs['from_uid'], kwargs['proposal_id'], kwargs['value'])
+
+    def promise_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_promise(kwargs['from_uid'], kwargs['proposal_id'], kwargs['prev_accepted_id'],
+                                     kwargs['prev_accepted_value'])
+
+    def prepare_nack_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
+
+    def accept_nack_handler(self, msg):
+        kwargs = msg['kwargs']
+        self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
 
     def run(self): 
         '''
@@ -176,8 +195,10 @@ class Island(object):
                     # XXX how are we going to decide what a quorum is, when
                     # machines may be failing all over the place?
                     self.status = IslandStatus.MIGRATION_READY
-                    self.paxos_proposer.set_proposal(mid_to_agents.keys())
-                    self.paxos_proposer.prepare()
+                    self.paxos_node.set_proposal(mid_to_agents.keys())
+                    self.paxos_node.prepare()
+
+                    time.sleep(4)
 
                     if not done:
                         self.status = IslandStatus.EVOLUTION_DONE
@@ -298,6 +319,18 @@ class Island(object):
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
                         print "\tRESPONSE: ", response
+                    elif msg['action'] == Action.SEND_PREPARE_NACK:
+                        response = self.prepare_nack_handler(msg)
+                    elif msg['action'] == Action.SEND_ACCEPT_NACK:
+                        response = self.accept_nack_handler(msg)
+                    elif msg['action'] == Action.SEND_PREPARE:
+                        response = self.prepare_handler(msg)
+                    elif msg['action'] == Action.SEND_PROMISE:
+                        response = self.promise_handler(msg)
+                    elif msg['action'] == Action.SEND_ACCEPT:
+                        response = self.accept_handler(msg)
+                    elif msg['action'] == Action.SEND_ACCEPTED:
+                        response = self.accepted_handler(msg)
                     else:
                         raise Exception('Unexpected message!!!!!')
                     
@@ -306,7 +339,8 @@ class Island(object):
                         # Oopsies network is slow
                         time.sleep(1.5)
                     
-                    send_msg(sock, response)
+                    if response:
+                        send_msg(sock, response)
 
             except RuntimeError as e:
                 pass
