@@ -30,6 +30,9 @@ class Agent(object):
     are passed around the islands. This is so that we can have several
     different agent representations/Agent subclasses that can all be
     evolved by an Island instantiation.
+
+    However, an agent representation in the all_agents or my_agents lists is
+    always an Agent type
     '''
     def __init__(self, genotype):
         ''' initialize the agent '''
@@ -61,7 +64,7 @@ class Island(object):
     participates in migrations
     '''
 
-    def __init__(self, mid, my_agents, all_agents, mid_to_ports):
+    def __init__(self, mid, my_agents, all_agents, mid_to_ports, AgentType):
         '''
         Initializes a machine which represents an evolutionary island 
         
@@ -79,6 +82,7 @@ class Island(object):
         self.status = IslandStatus.IDLE
         self.migration_id = 0
         self.shuffled_agents = None
+        self.AgentType = AgentType
 
         self.dprint('Initializing')
 
@@ -217,7 +221,7 @@ class Island(object):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accept_request(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
         if self.mid in kwargs['proposal_value']:
-            self.prepare_migrate(kwargs['accepted_value'])
+            self.prepare_migrate(kwargs['proposal_value'])
 
     def promise_handler(self, msg):
         '''
@@ -297,7 +301,7 @@ class Island(object):
                     if mid != self.mid and mid not in self.mid_to_agents:
                         status, agents = self.get_status(mid)
                         if status is not None and agents:
-                            self.mid_to_agents[mid] = agents
+                            self.mid_to_agents[mid] = [self.AgentType(a) for a in agents]
                         if status is not None:
                             numresponses += 1
 
@@ -350,7 +354,9 @@ class Island(object):
             # proposal, there should be no KeyErrors
             # all_agents should thus be in the same order for all machines participating in the
             # migration
-            self.all_agents = [self.mid_to_agents[key] for key in self.migration_participants]
+            self.all_agents = []
+            for key in self.migration_participants:
+                self.all_agents += self.mid_to_agents[key] 
             self.run_migration()
 
     def run_epoch(self):
@@ -369,7 +375,6 @@ class Island(object):
         n is the number of participating islands
         '''
         self.my_agents = []
-        print self.migration_participants
         my_index = sorted(self.migration_participants).index(self.mid)
         num_participants = len(self.migration_participants)
         for i, agent in enumerate(self.all_agents):

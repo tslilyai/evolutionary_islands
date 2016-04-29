@@ -50,13 +50,13 @@ def main():
     agents = [ValueAgent(i) for i in range(100)]
 
     if pid1 == 0 and pid2 == 0:
-        isl = ValueIsland(1, agents[::4], agents, mid_to_ports)
+        isl = ValueIsland(1, agents[::4], agents, mid_to_ports, ValueAgent)
     elif pid1 == 0:
-        isl = ValueIsland(2, agents[1::4], agents, mid_to_ports)
+        isl = ValueIsland(2, agents[1::4], agents, mid_to_ports, ValueAgent)
     elif pid2 == 0:
-        isl = ValueIsland(3, agents[2::4], agents, mid_to_ports)
+        isl = ValueIsland(3, agents[2::4], agents, mid_to_ports, ValueAgent)
     else:
-        isl = ValueIsland(4, agents[3::4], agents, mid_to_ports)
+        isl = ValueIsland(4, agents[3::4], agents, mid_to_ports, ValueAgent)
 
     s = os.urandom(4)
     s = sum([256**i * ord(c) for i, c in enumerate(s)])
