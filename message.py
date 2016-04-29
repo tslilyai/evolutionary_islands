@@ -150,4 +150,4 @@ class PaxosMessenger(Messenger):
 
     def on_resolution(self, proposal_id, proposal_value):
         if self.mid in proposal_value:
-            self.island.prepare_migrate()
+            self.island.prepare_migrate(self.island.migration_participants)

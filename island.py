@@ -15,6 +15,12 @@ from paxos.practical import Node, ProposalID
 from threading import Lock
 
 def mk_proposal_id(l):
+    '''
+    creates a proposal ID for a Paxos ballot to send
+
+    :param l: proposal label (either None or a pair of 
+              proposal_id, proposal_value)
+    '''
     if l is None:
         return l
     return ProposalID(l[0], l[1])
@@ -124,7 +130,8 @@ class Island(object):
         :return: json-encoded message
         '''
         kwargs['migration_id'] = self.migration_id
-        return create_msg(self.mid, action, *args, **kwargs)
+        msg = create_msg(self.mid, action, *args, **kwargs)
+        return msg
 
     def dprint(self, fmt, *args, **kwargs):
         colors = ['\033[32m', '\033[33m', '\033[34m', '\033[35m', '\033[36m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m']
@@ -521,6 +528,6 @@ class Island(object):
             while True:
                 #accept connections from outside
                 clientsocket, address = self.mid_to_sockets[self.mid].accept()
-                ct = thread.start_new_thread(process, (clientsocket,))
+                process(clientsocket)
 
         thread.start_new_thread(loop, ())
