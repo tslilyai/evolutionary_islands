@@ -116,12 +116,7 @@ class Island(object):
 
         return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
-    def get_all_agents(self):
-        '''
-        Queries all machines for the current list of all agents
-        '''
-        # XXX do we actually need this? if we already have all agents from the 
-        # status msgs when we start the migration
+    def get_prepare_handler(self, msg):
         pass
 
     def run(self): 
@@ -188,6 +183,10 @@ class Island(object):
                         self.status = IslandStatus.EVOLUTION_DONE
 
                 time.sleep(4)
+
+            assert self.status == IslandStatus.MIGRATION
+            # self.migration_participants is a list of islands that have ratified paxos proposal
+            self.allagents = sum(mid_to_agents.values(), [])
 
 
     def run_epoch(self):
