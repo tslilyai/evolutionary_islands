@@ -6,6 +6,7 @@ import thread
 import sys
 import random
 import time
+import inspect
 import os
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
@@ -65,7 +66,6 @@ class Island(object):
                             (across all machines)
         :param mid_to_ports: tuple of (host, port) of machine with ID mid
         '''
-        print 'Machine #%d: Initializing' % mid
         self.mid = mid
         self.my_agents = my_agents
         self.all_agents = all_agents 
@@ -73,6 +73,8 @@ class Island(object):
         self.mid_to_sockets = {}
         self.status = IslandStatus.IDLE
         self.shuffled_agents = None
+
+        self.dprint('Initializing')
 
         self.socket_lock = Lock()
         self.status_lock = Lock()
@@ -86,7 +88,7 @@ class Island(object):
         self.paxos_messenger = PaxosMessenger(self.mid, self.mid_to_sockets, self) 
         self.paxos_node = Node(self.paxos_messenger, self.mid, len(self.mid_to_sockets)/2 + 1)
 
-        print 'Machine #%d: Done Initializing' % self.mid
+        self.dprint('Done Initializing')
 
         def die_thread():
             '''
@@ -97,7 +99,7 @@ class Island(object):
             while True:
                 time.sleep(1)
                 if random.random() < p:
-                    print 'Machine #%d: PANIC PANIC PANIC PANIC!!!' % self.mid
+                    self.dprint('PANIC PANIC PANIC PANIC!!!')
                     os._exit(1)
 
         # thread.start_new_thread(die_thread, ())
@@ -105,6 +107,12 @@ class Island(object):
     def create_msg(self, action, *args, **kwargs):
         kwargs['migration_id'] = self.migration_id
         return create_msg(self.mid, action, *args, **kwargs)
+
+    def dprint(self, fmt, *args):
+        _, fname, lineno, funcname, _, _ = inspect.getouterframes(inspect.currentframe())[1]
+        fname = os.path.basename(fname)
+        print ('%.3f [Machine %d] [Called from %s (%s:%d)]' % (time.time(), self.mid, funcname, fname, lineno)) + (fmt % args)
+        sys.stdout.flush()
 
     def prepare_migrate(self):
         if self.status != IslandStatus.MIGRATION:
@@ -246,6 +254,10 @@ class Island(object):
                     if done or numresponses == 0:
                         # Start Paxos Ballot to start migration
                         self.status = IslandStatus.MIGRATION_READY
+                        time.sleep(1)
+                        if self.status == IslandStatus.MIGRATION:
+                            break
+                        self.proposed_value = None
                         self.paxos_node.set_proposal(mid_to_agents.keys())
                         self.paxos_node.prepare()
 
@@ -321,7 +333,7 @@ class Island(object):
         :return: decoded response to the message
         '''
         msg = self.create_msg(action)
-        print 'Machine #%d: Action %s sent to %d' % (self.mid, action.name, destination)
+        self.dprint('Action %s sent to %d', action.name, destination)
         try:
             sock = None
             with self.socket_lock:
@@ -341,7 +353,7 @@ class Island(object):
                 except Exception:
                     pass
                 del self.mid_to_sockets[destination]
-                print 'Machine #%d: I think machine %d died' % (self.mid, destination)
+                self.dprint('I think machine %d died' % destination)
 
         return None
 
@@ -360,7 +372,7 @@ class Island(object):
         self.mid_to_sockets[self.mid].listen(5)
         self.mid_to_sockets[self.mid].settimeout(None)
         self.listen()
-        print 'Machine #%d: Created server' % self.mid
+        self.dprint('Created server')
         time.sleep(1.0)
         for mid in mid_to_ports:
             if mid != self.mid:
@@ -380,10 +392,10 @@ class Island(object):
             try:
                 while True:
                     msg = decode_msg(recv_msg(sock))
-                    print 'Machine #%d: Received %s' % (self.mid, msg['action'].name)
+                    self.dprint('Received %s', msg['action'].name)
 
                     if msg['kwargs']['migration_id'] != self.migration_id:
-                        print 'Machine #%d: Migration id mismatch, ignoring message'
+                        self.dprint('Migration id mismatch, ignoring message')
                         continue
 
                     response = {}
@@ -403,7 +415,7 @@ class Island(object):
                         elif msg['action'] == Action.SEND_ACCEPTED:
                             response = self.accepted_handler(msg)
                     else:
-                        print 'Received unexpected message'
+                        self.dprint('Received unexpected message')
                     
                     # Force a timeout with probability 1% for testing purposes
                     if random.random() < 0.01:
