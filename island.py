@@ -103,14 +103,33 @@ class Island(object):
         thread.start_new_thread(die_thread, ())
 
     def create_msg(self, action, *args, **kwargs):
+        '''
+        create_message calls the internal message create_msg
+        with an additional "migration_id" argument value.
+
+        :param action: action of this message (message type, i.e. GETSTATUS)
+        :param args: arguments to the message
+        :param kwargs: additional (dict-type) arguments to the message
+        :return: json-encoded message
+        '''
         kwargs['migration_id'] = self.migration_id
         return create_msg(self.mid, action, *args, **kwargs)
 
     def prepare_migrate(self):
-        if self.status != IslandStatus.MIGRATION:
-            self.status = IslandStatus.MIGRATION
-            self.migration_id += 1
+        '''
+        set the status of the island to running migration
+        '''
+        with self.status_lock:
+            if self.status != IslandStatus.MIGRATION:
+                self.status = IslandStatus.MIGRATION
+                self.migration_id += 1
 
+    '''
+    MESSAGE HANDLERS
+    
+    Handlers of Paxos messages only respond when island status = MIGRATION_READY.
+    The get_status handler responds at any point.
+    '''
     def get_status_handler(self, msg):
         '''
         Send the status of this island (alive, currently eovlving, ready to migrate, etc.
@@ -128,16 +147,50 @@ class Island(object):
         return self.create_msg(Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
     def prepare_handler(self, msg):
+        '''
+        prepare_handler only response to the prepare request if 
+            1) the island is in the list of proposed islands and
+            2) the island has heard back from all the proposed islands
+
+        :param msg: accepted message sent, which includes the proposal id, the from uid, 
+                    and the proposal value,
+        :return: none
+        '''
         kwargs = msg['kwargs']
+
+        # if the island is not included in the list of participating islands,
+        # the island cannot promise to participate...
+        if self.mid not in kwargs['proposal_value']:
+            return
+        # if this island has not heard back from all islands in the proposed migration, 
+        # it cannot promise to run the migration
+        for island in kwargs['proposal_value']:
+            if island not in self.mid_to_agents:
+                return
+
         self.paxos_node.recv_prepare(kwargs['from_uid'], kwargs['proposal_id'], kwargs['proposal_value'])
 
     def accepted_handler(self, msg):
+        '''
+        accepted_handler handles messages saying that the accept request was accepted
+
+        :param msg: accepted message sent, which includes the proposal id, the from uid, 
+                    and the accepted value,
+        :return: none
+        '''
         kwargs = msg['kwargs']
         self.paxos_node.recv_accepted(kwargs['from_uid'], kwargs['proposal_id'], kwargs['accepted_value'])
         if self.mid in kwargs['accepted_value']:
             self.prepare_migrate()
 
     def accept_handler(self, msg):
+        '''
+        accept_handler accepts the request 
+
+        :param msg: accept message sent, which includes the proposal id, the from uid, 
+                    and the proposal value,
+        :return: none
+        '''
         kwargs = msg['kwargs']
         self.paxos_node.recv_accept_request(kwargs['from_uid'], kwargs['proposal_id'], kwargs['value'])
         if self.mid in kwargs['value']:
@@ -145,35 +198,36 @@ class Island(object):
 
     def promise_handler(self, msg):
         '''
-        promise_handler sends a promise to run this migration if 
-            1) the island is in the list of proposed islands and
-            2) the island has heard back from all the proposed islands
+        promise_handler sends a promise to run this migration.
+
+        :param msg: promise message sent, which includes the proposal id, the from uid, the previously
+                    accepted proposal id, and the previously accepted value
+        :return: none
         '''
         kwargs = msg['kwargs']
 
-        # if the island is not included in the list of participating islands,
-        # the island cannot promise to participate...
-        if self.mid not in kwargs['prev_accepted_value']:
-            return
-        # if this island has not heard back from all islands in the proposed migration, 
-        # it cannot promise to run the migration
-        for island in kwargs['prev_accepted_value']:
-            if island not in self.mid_to_agents:
-                return
-
-        with self.status_lock:
-            self.status = IslandStatus.MIGRATION
-
         self.paxos_node.recv_promise(kwargs['from_uid'], kwargs['proposal_id'], kwargs['prev_accepted_id'],
                                      kwargs['prev_accepted_value'])
-        if self.mid in kwargs['accepted_value']:
-            self.prepare_migrate()
 
     def prepare_nack_handler(self, msg):
+        '''
+        prepare_nack_handler handles prepare_nack messages
+
+        :param msg: prepare_nack message sent, which includes the proposal id, the from uid, and 
+                    the promised_id
+        :return: none
+        '''
         kwargs = msg['kwargs']
         self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
 
     def accept_nack_handler(self, msg):
+        '''
+        accept_nack_handler handles accept_nack messages
+
+        :param msg: accept_nack message sent, which includes the proposal id, the from uid, and 
+                    the promised_id
+        :return: none
+        '''
         kwargs = msg['kwargs']
         self.paxos_node.recv_prepare_nack(kwargs['from_uid'], kwargs['proposal_id'], kwargs['promised_id'])
 
