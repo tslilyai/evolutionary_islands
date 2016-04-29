@@ -10,6 +10,7 @@ import os
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
 
+from paxos.practical import Proposer
 from threading import Lock
 
 class Agent(object):
@@ -19,10 +20,9 @@ class Agent(object):
     for specific evolutionary algorithm agent representations (i.e.
     a Neural Network or a value)
     '''
-    
-    def __init__(self):
+    def __init__(self, genotype):
         ''' initialize the agent '''
-        raise NotImplemented 
+        raise NotImplementedError
 
     def get_genotype(self):
         '''
@@ -30,7 +30,7 @@ class Agent(object):
         agent ID and Neural net parameter weights,
         or agent ID and agent characteristics/value).
         '''
-        raise NotImplemented
+        raise NotImplementedError
 
 class IslandStatus(Enum):
     '''
@@ -107,7 +107,7 @@ class Island(object):
         '''
         agents = []
         if self.status == IslandStatus.EVOLUTION_DONE:
-            agents = [a.value for a in self.shuffled_agents]
+            agents = [a.get_genotype() for a in self.shuffled_agents]
 
         return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
@@ -121,7 +121,7 @@ class Island(object):
 
     def run(self): 
         '''
-        Runs the island main loop (until the island crashes).
+        Runs the island main loop (until the island crashes or is shut down).
         This loop does the following actions:
             1. run several epochs of evolution
             2. randomly shuffle the evolved agents in this machine's population
@@ -157,7 +157,7 @@ class Island(object):
                     if mid != self.mid and mid not in mid_to_agents:
                         status, agents = self.get_status(mid)
                         if status is not None and agents:
-                            self.mid_to_agents[mid] = agents
+                            mid_to_agents[mid] = agents
                         if status is not None:
                             numresponses += 1
 
@@ -191,7 +191,7 @@ class Island(object):
         Should be overridden to suit the purposes of whichever
         evolutionary algorithm is being run
         '''
-        raise NotImplemented
+        raise NotImplementedError
 
     def run_migration(self):
         '''
@@ -205,14 +205,15 @@ class Island(object):
         Get the status of the destination island
 
         :param destination: The mid of the machine whose status to get
-        :return: status of the machine 
+        :return: status of the machine and list of machine's agents (if the island
+                    is done evolving)
         '''
 
         resp = self.rpc_call(destination, Action.GETSTATUS)
         if resp is not None:
             # return the AID and genotype of the Agent for the recipient island machine 
             # to store and potentially evolve
-            return IslandStatus(resp['status']), [Agent.get_genotype() for i in resp['agents']]
+            return IslandStatus(resp['kwargs']['status']), resp['kwargs']['agents']
         return None, []
 
     def rpc_call(self, destination, action, *args, **kwargs):
@@ -292,14 +293,15 @@ class Island(object):
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
+                        print "\tRESPONSE: ", response
                     else:
                         raise Exception('Unexpected message!!!!!')
-
+                    
                     # Force a timeout with probability 1% for testing purposes
                     if random.random() < 0.01:
                         # Oopsies network is slow
                         time.sleep(1.5)
-
+                    
                     send_msg(sock, response)
 
             except RuntimeError as e:
