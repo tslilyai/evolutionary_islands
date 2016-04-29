@@ -83,7 +83,7 @@ class Island(object):
         self.connect(mid_to_ports)
 
         # This island abides by the Paxos protocol
-        self.paxos_messenger = PaxosMessenger(self.mid, self.mid_to_sockets) 
+        self.paxos_messenger = PaxosMessenger(self.mid, self.mid_to_sockets, self) 
         self.paxos_node = Node(self.paxos_messenger, self.mid, len(self.mid_to_sockets)/2 + 1)
 
         print 'Machine #%d: Done Initializing' % self.mid
@@ -102,6 +102,15 @@ class Island(object):
 
         thread.start_new_thread(die_thread, ())
 
+    def create_msg(self, action, *args, **kwargs):
+        kwargs['migration_id'] = self.migration_id
+        return create_msg(self.mid, action, *args, **kwargs)
+
+    def prepare_migrate(self):
+        if self.status != IslandStatus.MIGRATION:
+            self.status = IslandStatus.MIGRATION
+            self.migration_id += 1
+
     def get_status_handler(self, msg):
         '''
         Send the status of this island (alive, currently eovlving, ready to migrate, etc.
@@ -116,19 +125,23 @@ class Island(object):
             if self.status == IslandStatus.EVOLUTION_DONE:
                 agents = [a.get_genotype() for a in self.shuffled_agents]
 
-        return create_msg(self.mid, Action.REPLYSTATUS, status=self.status.value, agents=agents)
+        return self.create_msg(Action.REPLYSTATUS, status=self.status.value, agents=agents)
 
     def prepare_handler(self, msg):
         kwargs = msg['kwargs']
-        self.paxos_node.recv_prepare(kwargs['from_uid'], kwargs['proposal_id'])
+        self.paxos_node.recv_prepare(kwargs['from_uid'], kwargs['proposal_id'], kwargs['proposal_value'])
 
     def accepted_handler(self, msg):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accepted(kwargs['from_uid'], kwargs['proposal_id'], kwargs['accepted_value'])
+        if self.mid in kwargs['accepted_value']:
+            self.prepare_migrate()
 
     def accept_handler(self, msg):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accept_request(kwargs['from_uid'], kwargs['proposal_id'], kwargs['value'])
+        if self.mid in kwargs['value']:
+            self.prepare_migrate()
 
     def promise_handler(self, msg):
         '''
@@ -153,6 +166,8 @@ class Island(object):
 
         self.paxos_node.recv_promise(kwargs['from_uid'], kwargs['proposal_id'], kwargs['prev_accepted_id'],
                                      kwargs['prev_accepted_value'])
+        if self.mid in kwargs['accepted_value']:
+            self.prepare_migrate()
 
     def prepare_nack_handler(self, msg):
         kwargs = msg['kwargs']
@@ -297,7 +312,7 @@ class Island(object):
         :param kwargs: additional (dict-type) arguments to the message
         :return: decoded response to the message
         '''
-        msg = create_msg(self.mid, action)
+        msg = self.create_msg(action)
         print 'Machine #%d: Action %s sent to %d' % (self.mid, action.name, destination)
         try:
             sock = None
@@ -358,6 +373,10 @@ class Island(object):
                 while True:
                     msg = decode_msg(recv_msg(sock))
                     print 'Machine #%d: Received %s' % (self.mid, msg['action'].name)
+
+                    if msg['kwargs']['migration_id'] != self.migration_id:
+                        print 'Machine #%d: Migration id mismatch, ignoring message'
+                        continue
 
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
