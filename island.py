@@ -132,10 +132,14 @@ class Island(object):
                + (fmt % args))
         sys.stdout.flush()
 
-    def prepare_migrate(self):
+    def prepare_migrate(self, migration_participants):
         '''
         set the status of the island to running migration
+
+        :param migration_participants: participating islands in the migration
+        :return: none
         '''
+        self.migration_participants = migration_participants
         with self.status_lock:
             if self.status != IslandStatus.MIGRATION:
                 self.status = IslandStatus.MIGRATION
@@ -200,7 +204,7 @@ class Island(object):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accepted(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['accepted_value'])
         if self.mid in kwargs['accepted_value']:
-            self.prepare_migrate()
+            self.prepare_migrate(kwargs['accepted_value'])
 
     def accept_handler(self, msg):
         '''
@@ -213,7 +217,7 @@ class Island(object):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accept_request(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
         if self.mid in kwargs['proposal_value']:
-            self.prepare_migrate()
+            self.prepare_migrate(kwargs['accepted_value'])
 
     def promise_handler(self, msg):
         '''
@@ -365,7 +369,8 @@ class Island(object):
         n is the number of participating islands
         '''
         self.my_agents = []
-        my_index = self.migration_participants.sort().index(self.mid)
+        print self.migration_participants
+        my_index = sorted(self.migration_participants).index(self.mid)
         num_participants = len(self.migration_participants)
         for i, agent in enumerate(self.all_agents):
             if (i-my_index) % num_participants == 0:
