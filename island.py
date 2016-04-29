@@ -100,7 +100,7 @@ class Island(object):
                     print 'Machine #%d: PANIC PANIC PANIC PANIC!!!' % self.mid
                     os._exit(1)
 
-        thread.start_new_thread(die_thread, ())
+        # thread.start_new_thread(die_thread, ())
 
     def create_msg(self, action, *args, **kwargs):
         kwargs['migration_id'] = self.migration_id
@@ -213,10 +213,10 @@ class Island(object):
             while self.status != IslandStatus.MIGRATION:
                 with self.status_lock:
                     status = self.status
-                    if status == IslandStatus.MIGRATION:
-                        break
                     numresponses = 0
                     for mid in mids:
+                        if self.status == IslandStatus.MIGRATION:
+                            break
                         if mid != self.mid and mid not in self.mid_to_agents:
                             status, agents = self.get_status(mid)
                             if status is not None and agents:
@@ -225,6 +225,8 @@ class Island(object):
                                 numresponses += 1
 
                     done = True
+                    if self.status == IslandStatus.MIGRATION:
+                        break
                     with self.socket_lock:
                         # check to see if we've heard back from all islands
                         for mid in self.mid_to_sockets:
@@ -238,6 +240,9 @@ class Island(object):
                             if mid not in self.mid_to_sockets:
                                 del self.mid_to_agents[mid]
 
+                    if self.status == IslandStatus.MIGRATION:
+                        break
+
                     if done or numresponses == 0:
                         # Start Paxos Ballot to start migration
                         self.status = IslandStatus.MIGRATION_READY
@@ -245,6 +250,9 @@ class Island(object):
                         self.paxos_node.prepare()
 
                         time.sleep(4)
+
+                        if self.status == IslandStatus.MIGRATION:
+                            break
 
                         if not done:
                             self.status = IslandStatus.EVOLUTION_DONE
@@ -381,20 +389,21 @@ class Island(object):
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
-                    elif msg['action'] == Action.SEND_PREPARE_NACK:
-                        response = self.prepare_nack_handler(msg)
-                    elif msg['action'] == Action.SEND_ACCEPT_NACK:
-                        response = self.accept_nack_handler(msg)
-                    elif msg['action'] == Action.SEND_PREPARE:
-                        response = self.prepare_handler(msg)
-                    elif msg['action'] == Action.SEND_PROMISE:
-                        response = self.promise_handler(msg)
-                    elif msg['action'] == Action.SEND_ACCEPT:
-                        response = self.accept_handler(msg)
-                    elif msg['action'] == Action.SEND_ACCEPTED:
-                        response = self.accepted_handler(msg)
+                    if self.status == IslandStatus.MIGRATION_READY:
+                        if msg['action'] == Action.SEND_PREPARE_NACK:
+                            response = self.prepare_nack_handler(msg)
+                        elif msg['action'] == Action.SEND_ACCEPT_NACK:
+                            response = self.accept_nack_handler(msg)
+                        elif msg['action'] == Action.SEND_PREPARE:
+                            response = self.prepare_handler(msg)
+                        elif msg['action'] == Action.SEND_PROMISE:
+                            response = self.promise_handler(msg)
+                        elif msg['action'] == Action.SEND_ACCEPT:
+                            response = self.accept_handler(msg)
+                        elif msg['action'] == Action.SEND_ACCEPTED:
+                            response = self.accepted_handler(msg)
                     else:
-                        raise Exception('Unexpected message!!!!!')
+                        print 'Received unexpected message'
                     
                     # Force a timeout with probability 1% for testing purposes
                     if random.random() < 0.01:
