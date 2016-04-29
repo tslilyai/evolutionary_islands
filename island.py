@@ -19,6 +19,11 @@ class Agent(object):
     This class provides the interface that can be implemented
     for specific evolutionary algorithm agent representations (i.e.
     a Neural Network or a value)
+
+    During evolution, an agent's genotype (i.e. agent ID and parameters)
+    are passed around the islands. This is so that we can have several
+    different agent representations/Agent subclasses that can all be
+    evolved by an Island instantiation.
     '''
     def __init__(self, genotype):
         ''' initialize the agent '''
