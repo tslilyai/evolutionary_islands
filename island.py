@@ -211,11 +211,15 @@ class Island(object):
 
                     done = True
                     with self.socket_lock:
+                        # check to see if we've heard back from all islands
                         for mid in self.mid_to_sockets:
                             if mid not in self.mid_to_agents:
                                 done = False
                                 break
-                        for mid in self.mid_to_agents:
+                        # check to see if an island has died in the time since we've
+                        # heard from the island
+                        mid_to_agents = self.mid_to_agents
+                        for mid in mid_to_agents:
                             if mid not in self.mid_to_sockets:
                                 del self.mid_to_agents[mid]
 
@@ -238,7 +242,7 @@ class Island(object):
             # proposal, there should be no KeyErrors
             # all_agents should thus be in the same order for all machines participating in the
             # migration
-            self.all_agents = [mid_to_agents[key] for key in self.migration_participants]
+            self.all_agents = [self.mid_to_agents[key] for key in self.migration_participants]
             self.run_migration()
 
     def run_epoch(self):
