@@ -199,7 +199,7 @@ class Island(object):
         # it cannot promise to run the migration
         for island in kwargs['proposal_value']:
             if island not in self.mid_to_agents:
-                self.dprint("%d not in mid_to_agents (%s)", island, self.mid_to_agents)
+                self.dprint("%d not in mid_to_agents (%s)", island, self.mid_to_agents.keys())
                 return
 
         self.paxos_node.recv_prepare(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
