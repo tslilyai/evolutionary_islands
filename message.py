@@ -143,7 +143,7 @@ class PaxosMessenger(Messenger):
                 send_msg(self.mid_to_sockets[to_uid], msg)
 
     def send_accepted(self, proposal_id, accepted_value):
-        msg = self.island.create_msg(self.mid, Action.SEND_ACCEPTED, from_uid=self.mid, proposal_id=proposal_id, accepted_value=accepted_value)
+        msg = self.island.create_msg(Action.SEND_ACCEPTED, from_uid=self.mid, proposal_id=proposal_id, accepted_value=accepted_value)
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)

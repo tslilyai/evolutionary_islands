@@ -77,6 +77,7 @@ class Island(object):
         self.num_epochs = 1
         self.mid_to_sockets = {}
         self.status = IslandStatus.IDLE
+        self.migration_id = 0
         self.shuffled_agents = None
 
         self.dprint('Initializing')
@@ -84,7 +85,6 @@ class Island(object):
         self.socket_lock = Lock()
         self.status_lock = Lock()
         self.ready_for_migration = False
-        self.migration_id = 0
         self.migration_participants = []
 
         self.connect(mid_to_ports)
@@ -123,12 +123,12 @@ class Island(object):
         return create_msg(self.mid, action, *args, **kwargs)
 
     def dprint(self, fmt, *args, **kwargs):
-        colors = ['\033[32m', '\033[33m', '\033[34m', '\033[35m]', '\033[36m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m']
+        colors = ['\033[32m', '\033[33m', '\033[34m', '\033[35m', '\033[36m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m']
         _, fname, lineno, funcname, _, _ = inspect.getouterframes(inspect.currentframe())[1]
         fname = os.path.basename(fname)
         color = colors[self.mid % len(colors)] if 'critical' not in kwargs else '\033[31m'
-        print (('%s%s [Machine %d (%s)] [%s (%s:%d)]\033[00m ' %
-                (color, time.strftime('%H:%M:%S'), self.mid, self.status, funcname, fname, lineno))
+        print (('%s%s [Machine %d, migration %d (%s)] [%s (%s:%d)]\033[00m ' %
+                (color, time.strftime('%H:%M:%S'), self.mid, self.migration_id, self.status, funcname, fname, lineno))
                + (fmt % args))
         sys.stdout.flush()
 
@@ -468,7 +468,7 @@ class Island(object):
                     self.dprint('Received %s', msg['action'].name)
 
                     if msg['kwargs']['migration_id'] != self.migration_id:
-                        self.dprint('Migration id mismatch, ignoring message')
+                        self.dprint('Migration id mismatch (%d != %d), ignoring message', msg['kwargs']['migration_id'], self.migration_id)
                         continue
 
                     response = {}
