@@ -76,6 +76,8 @@ class Island(object):
 
         self.socket_lock = Lock()
         self.ready_for_migration = False
+        self.migration_id = 0
+        self.migration_participants = []
 
         self.connect(mid_to_ports)
 
@@ -150,7 +152,6 @@ class Island(object):
             with self.socket_lock:
                 mids = self.mid_to_sockets.keys()
 
-            # XXX we never actually set status to migration?
             while self.status != IslandStatus.MIGRATION:
                 numresponses = 0
                 for mid in mids:
@@ -173,8 +174,6 @@ class Island(object):
 
                 if done or numresponses == 0:
                     # Start Paxos Ballot to start migration
-                    # XXX how are we going to decide what a quorum is, when
-                    # machines may be failing all over the place?
                     self.status = IslandStatus.MIGRATION_READY
                     self.paxos_proposer.set_proposal(mid_to_agents.keys())
                     self.paxos_proposer.prepare()
@@ -186,8 +185,12 @@ class Island(object):
 
             assert self.status == IslandStatus.MIGRATION
             # self.migration_participants is a list of islands that have ratified paxos proposal
-            self.allagents = sum(mid_to_agents.values(), [])
-
+            # since an island only accepts a proposal if it has heard back from all islands in the 
+            # proposal, there should be no KeyErrors
+            # all_agents should thus be in the same order for all machines participating in the
+            # migration
+            self.all_agents = [mid_to_agents[key] for key in self.migration_participants]
+            self.run_migration()
 
     def run_epoch(self):
         '''
@@ -201,8 +204,11 @@ class Island(object):
         '''
         Runs the migration process
         '''
-        # TODO
-        time.sleep(1.0 + random.randint(0, 200)/100.0)
+        self.my_agents = []
+        my_index = self.migration_participants.sort().index(self.mid)
+        for i, agent in enumerate(self.all_agents):
+            if i % my_index == 0:
+                self.my_agents.append(agent)
 
     def get_status(self, destination):
         '''
