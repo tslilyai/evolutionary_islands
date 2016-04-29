@@ -195,7 +195,7 @@ class Island(object):
             with self.socket_lock:
                 mids = self.mid_to_sockets.keys()
 
-            while status != IslandStatus.MIGRATION:
+            while self.status != IslandStatus.MIGRATION:
                 with self.status_lock:
                     status = self.status
                     if status == IslandStatus.MIGRATION:
@@ -360,7 +360,6 @@ class Island(object):
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
-                        print "\tRESPONSE: ", response
                     elif msg['action'] == Action.SEND_PREPARE_NACK:
                         response = self.prepare_nack_handler(msg)
                     elif msg['action'] == Action.SEND_ACCEPT_NACK:

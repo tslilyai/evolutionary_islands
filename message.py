@@ -117,31 +117,31 @@ class PaxosMessenger(Messenger):
         self.mid_to_sockets = mid_to_sockets
 
     def send_prepare_nack(self, to_uid, proposal_id, promised_id):
-        msg = create_msg(self.mid, Action.SEND_PREPARE_NACK, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
+        msg = create_msg(self.mid, Action.SEND_PREPARE_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
         send_msg(self.mid_to_sockets[to_uid], msg)
 
     def send_accept_nack(self, to_uid, proposal_id, promised_id):
-        msg = create_msg(self.mid, Action.SEND_ACCEPT_NACK, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
+        msg = create_msg(self.mid, Action.SEND_ACCEPT_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
         send_msg(self.mid_to_sockets[to_uid], msg)
 
     def send_prepare(self, proposal_id):
-        msg = create_msg(self.mid, Action.SEND_PREPARE, proposal_id=proposal_id)
+        msg = create_msg(self.mid, Action.SEND_PREPARE, from_uid=self.mid, proposal_id=proposal_id)
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)
 
     def send_promise(self, proposal_uid, proposal_id, previous_id, accepted_value):
-        msg = create_msg(self.mid, Action.SEND_PROMISE, proposal_id=proposal_id, previous_id=previous_id, accepted_value=accepted_value)
+        msg = create_msg(self.mid, Action.SEND_PROMISE, from_uid=self.mid, proposal_id=proposal_id, previous_id=previous_id, accepted_value=accepted_value)
         send_msg(self.mid_to_sockets[proposal_uid], msg)
 
     def send_accept(self, proposal_id, proposal_value):
-        msg = create_msg(self.mid, Action.SEND_ACCEPT, proposal_id=proposal_id, proposal_value=proposal_value)
+        msg = create_msg(self.mid, Action.SEND_ACCEPT, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)
 
     def send_accepted(self, proposal_id, accepted_value):
-        msg = create_msg(self.mid, Action.SEND_ACCEPTED, proposal_id=proposal_id, accepted_value=accepted_value)
+        msg = create_msg(self.mid, Action.SEND_ACCEPTED, from_uid=self.mid, proposal_id=proposal_id, accepted_value=accepted_value)
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)
