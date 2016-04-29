@@ -457,7 +457,7 @@ class Island(object):
                         elif msg['action'] == Action.SEND_ACCEPTED:
                             response = self.accepted_handler(msg)
                     else:
-                        print 'Received unexpected message'
+                        print 'Cannot handle message at this time'
                     
                     # Force a timeout with probability 1% for testing purposes
                     if random.random() < 0.01:
