@@ -63,7 +63,7 @@ class Proposer (essential.Proposer):
         Sets the proposal value for this node iff this node is not already aware of
         another proposal having already been accepted. 
         '''
-        if self.proposed_value is None:
+        if self.accepted_value is None:
             self.proposed_value = value
 
             if self.leader and self.active:
@@ -86,7 +86,7 @@ class Proposer (essential.Proposer):
         
             self.next_proposal_number += 1
 
-        if self.active:
+        if self.active and self.accepted_value is None:
             self.messenger.send_prepare(self.proposal_id, self.proposed_value)
 
     
@@ -308,7 +308,7 @@ class Learner (essential.Learner):
         t[0].add( from_uid )
         t[1].add( from_uid )
 
-        if len(t[0]) == self.quorum_size:
+        if len(t[0]) == len(accepted_value) - 1:
             self.final_value       = accepted_value
             self.final_proposal_id = proposal_id
             self.final_acceptors   = t[0]
@@ -320,7 +320,7 @@ class Learner (essential.Learner):
             
 
     
-class Node (Proposer, essential.Acceptor, Learner):
+class Node (essential.Proposer, essential.Acceptor, essential.Learner):
     '''
     This class supports the common model where each node on a network preforms
     all three Paxos roles, Proposer, Acceptor, and Learner.
@@ -345,7 +345,7 @@ class Node (Proposer, essential.Acceptor, Learner):
 
         
     def recv_prepare(self, from_uid, proposal_id, proposal_value):
-        self.observe_proposal( from_uid, proposal_id )
+        # self.observe_proposal( from_uid, proposal_id )
         return super(Node,self).recv_prepare( from_uid, proposal_id, proposal_value)
 
 

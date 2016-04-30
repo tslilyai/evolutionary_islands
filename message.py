@@ -128,6 +128,8 @@ class PaxosMessenger(Messenger):
 
     def send_prepare(self, proposal_id, proposal_value):
         msg = self.island.create_msg(Action.SEND_PREPARE, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
+
+        self.island.dprint("Preparing proposal: %s %s", proposal_id, proposal_value)
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)
@@ -148,7 +150,9 @@ class PaxosMessenger(Messenger):
         for to_uid in self.mid_to_sockets:
             if to_uid != self.mid:
                 send_msg(self.mid_to_sockets[to_uid], msg)
+        self.island.paxos_node.recv_accepted(self.mid, proposal_id, accepted_value)
 
     def on_resolution(self, proposal_id, proposal_value):
+        self.island.dprint('On resolution: %s, %s', proposal_id, proposal_value)
         if self.mid in proposal_value:
             self.island.prepare_migrate(proposal_value)

@@ -68,7 +68,7 @@ class Proposer (object):
         Sets the proposal value for this node iff this node is not already aware of
         another proposal having already been accepted. 
         '''
-        if self.proposed_value is None:
+        if self.proposed_value is None and self.accepted_value is None:
             self.proposed_value = value
 
 
@@ -82,7 +82,8 @@ class Proposer (object):
         
         self.next_proposal_number += 1
 
-        self.messenger.send_prepare(self.proposal_id, self.proposed_value)
+        if self.accepted_value is None:
+            self.messenger.send_prepare(self.proposal_id, self.proposed_value)
 
     
     def recv_promise(self, from_uid, proposal_id, prev_accepted_id, prev_accepted_value):
@@ -104,7 +105,7 @@ class Proposer (object):
             if prev_accepted_value is not None:
                 self.proposed_value = prev_accepted_value
 
-        if len(self.promises_rcvd) == self.quorum_size:
+        if len(self.promises_rcvd) == len(self.proposed_value) - 1: #self.quorum_size:
             
             if self.proposed_value is not None:
                 self.messenger.send_accept(self.proposal_id, self.proposed_value)
@@ -142,8 +143,6 @@ class Acceptor (object):
             self.accepted_id     = proposal_id
             self.accepted_value  = value
             self.messenger.send_accepted(proposal_id, self.accepted_value)
-
-
     
 class Learner (object):
 
@@ -194,7 +193,7 @@ class Learner (object):
         t[0] += 1
         t[1] += 1
 
-        if t[0] == self.quorum_size:
+        if t[0] == len(accepted_value) - 1:
             self.final_value       = accepted_value
             self.final_proposal_id = proposal_id
             self.proposals         = None

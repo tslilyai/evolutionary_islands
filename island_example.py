@@ -35,6 +35,9 @@ class FishAgent(Agent):
         '''
         return self.size > other.size
 
+    def __repr__(self):
+        return 'FishAgent(%s, %s)' % (self.id, self.size)
+
 class FishIsland(Island):
     '''
     Example island class to evolve FishAgents
@@ -62,14 +65,14 @@ class FishIsland(Island):
 def main():
     hostname = 'localhost'
     mid_to_ports = {
-        1: (hostname, 6011),
-        2: (hostname, 6012),
-        3: (hostname, 6013),
-        4: (hostname, 6014),
-        5: (hostname, 6015),
-        6: (hostname, 6016),
-        7: (hostname, 6017),
-        8: (hostname, 6018),
+        1: (hostname, 9011),
+        2: (hostname, 9012),
+        3: (hostname, 9013),
+        4: (hostname, 9014),
+        5: (hostname, 9015),
+        6: (hostname, 9016),
+        7: (hostname, 9017),
+        8: (hostname, 9018),
     }
 
     pid1 = os.fork()

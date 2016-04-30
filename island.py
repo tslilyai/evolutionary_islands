@@ -159,6 +159,7 @@ class Island(object):
         :return: none
         '''
         self.migration_participants = migration_participants[:]
+        self.dprint('MIGRATION!!!! Participants: %s', self.migration_participants)
         with self.status_lock:
             if self.status != IslandStatus.MIGRATION:
                 self.status = IslandStatus.MIGRATION
@@ -222,13 +223,16 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
+        self.dprint('Received accepted from %s, id=%s, value=%s', kwargs['from_uid'], kwargs['proposal_id'], kwargs['accepted_value'])
         self.paxos_node.recv_accepted(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['accepted_value'])
+        '''
         if self.mid in kwargs['accepted_value']:
             self.num_accepted += 1
             # we cannot start migrating until we've heard back from everyone
             # to whom we've sent an "Accept" message
-            if self.paxos_node.quorum_size == self.num_accepted:
+            if len(kwargs['accepted_value']) == self.num_accepted:
                 self.prepare_migrate(kwargs['accepted_value'])
+        '''
 
     def accept_handler(self, msg):
         '''
@@ -239,9 +243,16 @@ class Island(object):
         :return: none
         '''
         kwargs = msg['kwargs']
+        self.dprint('Received accept from %s, id=%s, value=%s', kwargs['from_uid'], kwargs['proposal_id'], kwargs['proposal_value'])
         self.paxos_node.recv_accept_request(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['proposal_value'])
+        '''
         if self.mid in kwargs['proposal_value']:
-            self.prepare_migrate(kwargs['proposal_value'])
+            self.num_accepted += 1
+            # we cannot start migrating until we've heard back from everyone
+            # to whom we've sent an "Accept" message
+            if len(kwargs['proposal_value']) == self.num_accepted:
+                self.prepare_migrate(kwargs['proposal_value'])
+        '''
 
     def promise_handler(self, msg):
         '''
@@ -313,6 +324,7 @@ class Island(object):
             with self.socket_lock:
                 mids = self.mid_to_sockets.keys()
 
+            self.paxos_node = Node(self.paxos_messenger, self.mid, len(self.mid_to_sockets)/2 + 1)
             while self.status != IslandStatus.MIGRATION:
                 numresponses = 0
                 for mid in mids:
@@ -330,11 +342,6 @@ class Island(object):
                     break
 
                 with self.socket_lock:
-                    # check to see if we've heard back from all islands
-                    for mid in self.mid_to_sockets:
-                        if mid not in self.mid_to_agents:
-                            done = False
-                            break
                     # check to see if an island has died in the time since we've
                     # heard from the island
                     mid_to_agents = self.mid_to_agents
@@ -342,6 +349,11 @@ class Island(object):
                         if mid not in self.mid_to_sockets:
                             del self.mid_to_agents[mid]
 
+                    # check to see if we've heard back from all islands
+                    for mid in self.mid_to_sockets:
+                        if mid not in self.mid_to_agents:
+                            done = False
+                            break
 
                 if done or numresponses == 0:
                     self.dprint("Got everyone's status: %s", mid_to_agents.keys())
@@ -350,14 +362,12 @@ class Island(object):
                             break
                         self.status = IslandStatus.MIGRATION_READY
                     # Start Paxos Ballot to start migration
-                    self.paxos_node.proposed_value = None
                     self.paxos_node.set_proposal(mid_to_agents.keys())
                     self.paxos_node.change_quorum_size(max(len(mid_to_agents.keys())-1, 
                                                             self.paxos_node.quorum_size))
-                    self.dprint("Preparing proposal")
                     self.paxos_node.prepare()
 
-                    time.sleep(2)
+                    time.sleep(6)
 
                     if self.status == IslandStatus.MIGRATION:
                         break
@@ -437,15 +447,18 @@ class Island(object):
         :return: decoded response to the message
         '''
         msg = self.create_msg(action)
-        self.dprint('Action %s sent to %d', action.name, destination)
+        # self.dprint('Action %s sent to %d', action.name, destination)
         try:
             sock = None
             with self.socket_lock:
                 if destination in self.mid_to_sockets:
                     sock = self.mid_to_sockets[destination]
 
-            send_msg(sock, msg)
-            resp = recv_msg(sock)
+            if sock:
+                send_msg(sock, msg)
+                resp = recv_msg(sock)
+            else:
+                raise RuntimeError()
             try:
                 return decode_msg(resp)
             except ValueError as e:
@@ -460,7 +473,8 @@ class Island(object):
                     self.mid_to_sockets[destination].close()
                 except Exception:
                     pass
-                del self.mid_to_sockets[destination]
+                if destination in self.mid_to_sockets:
+                    del self.mid_to_sockets[destination]
                 self.dprint('I think machine %d died' % destination)
 
         return None
@@ -481,7 +495,7 @@ class Island(object):
         self.mid_to_sockets[self.mid].settimeout(None)
         self.listen()
         self.dprint('Created server')
-        time.sleep(0.5)
+        time.sleep(1)
         for mid in mid_to_ports:
             if mid != self.mid:
                 self.mid_to_sockets[mid] = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -506,7 +520,7 @@ class Island(object):
                     except Exception as e:
                         self.dprint('ValueError: %s', mm, critical=True)
                         raise e
-                    self.dprint('Received %s', msg['action'].name)
+                    # self.dprint('Received %s', msg['action'].name)
 
                     if msg['kwargs']['migration_id'] != self.migration_id:
                         self.dprint('Migration id mismatch (%d != %d), ignoring message %s', msg['kwargs']['migration_id'], self.migration_id, msg)
