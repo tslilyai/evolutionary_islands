@@ -134,11 +134,18 @@ class Island(object):
         return msg
 
     def dprint(self, fmt, *args, **kwargs):
+        '''
+        Debugging log prints
+        
+        :param fmt: format string
+        :param args: list of arguments for the format string
+        :param kwargs: dictionary of arguments for the format string
+        '''
         colors = ['\033[32m', '\033[33m', '\033[34m', '\033[35m', '\033[36m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m']
         _, fname, lineno, funcname, _, _ = inspect.getouterframes(inspect.currentframe())[1]
         fname = os.path.basename(fname)
         color = colors[self.mid % len(colors)] if 'critical' not in kwargs else '\033[31m'
-        print (('%s%s [Machine %d, migration %d (%s)] [%s (%s:%d)]\033[00m ' %
+        print (('%s%s [Machine %d, migration %d (%s)] [%s (%s:%d)]\n\t\033[00m ' %
                 (color, time.strftime('%H:%M:%S'), self.mid, self.migration_id, self.status, funcname, fname, lineno))
                + (fmt % args))
         sys.stdout.flush()
@@ -366,7 +373,6 @@ class Island(object):
             for key in self.migration_participants:
                 self.all_agents += self.mid_to_agents[key] 
             self.run_migration()
-            self.migration_id += 1
 
     def run_epoch(self):
         '''
@@ -383,12 +389,16 @@ class Island(object):
         participants list.
         n is the number of participating islands
         '''
+        old_agents = self.my_agents
         self.my_agents = []
         my_index = sorted(self.migration_participants).index(self.mid)
         num_participants = len(self.migration_participants)
         for i, agent in enumerate(self.all_agents):
             if (i-my_index) % num_participants == 0:
                 self.my_agents.append(agent)
+
+        self.dprint("Old Agents: %s\n\tNew Agents: %s", old_agents, self.my_agents)
+        self.migration_id += 1
 
     def get_status(self, destination):
         '''
