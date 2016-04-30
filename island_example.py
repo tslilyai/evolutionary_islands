@@ -42,21 +42,34 @@ def main():
         2: (hostname, 6012),
         3: (hostname, 6013),
         4: (hostname, 6014),
+        5: (hostname, 6015),
+        6: (hostname, 6016),
+        7: (hostname, 6017),
+        8: (hostname, 6018),
     }
 
     pid1 = os.fork()
     pid2 = os.fork()
+    pid3 = os.fork()
 
-    agents = [ValueAgent(i) for i in range(100)]
+    agents = [ValueAgent(i) for i in range(104)]
 
-    if pid1 == 0 and pid2 == 0:
+    if pid1 == 0 and pid2 == 0 and pid3 == 0:
         isl = ValueIsland(1, agents[::4], agents, mid_to_ports, ValueAgent)
-    elif pid1 == 0:
+    elif pid1 == 0 and pid2 == 0:
         isl = ValueIsland(2, agents[1::4], agents, mid_to_ports, ValueAgent)
+    elif pid1 == 0 and pid3 == 0:
+        isl = ValueIsland(3, agents[1::4], agents, mid_to_ports, ValueAgent)
+    elif pid2 == 0 and pid3 == 0:
+        isl = ValueIsland(4, agents[2::4], agents, mid_to_ports, ValueAgent)
+    elif pid1 == 0:
+        isl = ValueIsland(5, agents[2::4], agents, mid_to_ports, ValueAgent)
     elif pid2 == 0:
-        isl = ValueIsland(3, agents[2::4], agents, mid_to_ports, ValueAgent)
+        isl = ValueIsland(6, agents[2::4], agents, mid_to_ports, ValueAgent)
+    elif pid3 == 0:
+        isl = ValueIsland(7, agents[2::4], agents, mid_to_ports, ValueAgent)
     else:
-        isl = ValueIsland(4, agents[3::4], agents, mid_to_ports, ValueAgent)
+        isl = ValueIsland(8, agents[3::4], agents, mid_to_ports, ValueAgent)
 
     s = os.urandom(4)
     s = sum([256**i * ord(c) for i, c in enumerate(s)])

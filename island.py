@@ -484,6 +484,7 @@ class Island(object):
             try:
                 while True:
                     try:
+                        mm = 'nothing yet'
                         mm = recv_msg(sock)
                         msg = decode_msg(mm)
                     except Exception as e:

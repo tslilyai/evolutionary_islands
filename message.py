@@ -92,7 +92,7 @@ def recv_msg(socket):
     m = ''
     m_len = 0
     while m_len < 4:
-        chunk = socket.recv(2048)
+        chunk = socket.recv(4)
         if chunk == '':
             raise RuntimeError('Socket connection error')
         m += chunk
@@ -104,12 +104,13 @@ def recv_msg(socket):
     chunks.append(m[4:])
     bytes_recd = len(m[4:])
     while bytes_recd < msg_len:
-        chunk = socket.recv(2048)
+        chunk = socket.recv(msg_len - bytes_recd)
         if chunk == '':
             raise RuntimeError("socket connection broken")
         chunks.append(chunk)
         bytes_recd = bytes_recd + len(chunk)
-    return ''.join(chunks)
+    tot = ''.join(chunks)
+    return tot
 
 class PaxosMessenger(Messenger):
     def __init__(self, mid, mid_to_sockets, island):
