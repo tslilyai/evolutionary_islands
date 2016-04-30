@@ -9,8 +9,8 @@ from island import Agent, Island
 
 class FishAgent(Agent):
     '''
-    ValueAgent provides a dummy example of what an agent may be.
-    This agent's value is equivalent to its agent ID.
+    FishAgent provides a dummy example of what an agent may be.
+    This agent's genotype is its fish_id and size.
     '''
     def __init__(self, (fish_id, size)):
         self.size = size
@@ -44,10 +44,10 @@ class FishIsland(Island):
         scores = defaultdict(int)
         fish_combos = list(itertools.combinations(self.my_agents, 2))
         for (f1, f2) in fish_combos:
-            if f1.__can_swim_away__(f2):
-                scores[f1] += 1
-            else:
-                assert(not f2.__can_eat__(f1))
+            if random.random < 0.5:
+                if f1.__can_swim_away__(f2):
+                    scores[f1] += 1
+            elif f2.__can_eat__(f1):
                 scores[f2] += 1
         
         # mutate by multiplying sizes of the fish by its score, and randomly sometimes
