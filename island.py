@@ -83,7 +83,7 @@ class Island(object):
         self.mid = mid
         self.my_agents = my_agents
         self.all_agents = all_agents 
-        self.num_epochs = 1
+        self.num_epochs = 10
         self.mid_to_sockets = {}
         self.status = IslandStatus.IDLE
         self.migration_id = 0
@@ -102,6 +102,7 @@ class Island(object):
         # This island abides by the Paxos protocol
         self.paxos_messenger = PaxosMessenger(self.mid, self.mid_to_sockets, self) 
         self.paxos_node = Node(self.paxos_messenger, self.mid, len(self.mid_to_sockets)/2 + 1)
+        self.num_accepted = 0
 
         self.dprint('Done Initializing')
 
@@ -161,6 +162,7 @@ class Island(object):
         with self.status_lock:
             if self.status != IslandStatus.MIGRATION:
                 self.status = IslandStatus.MIGRATION
+        self.num_accepted = 0
 
     '''
     MESSAGE HANDLERS
@@ -222,7 +224,11 @@ class Island(object):
         kwargs = msg['kwargs']
         self.paxos_node.recv_accepted(kwargs['from_uid'], mk_proposal_id(kwargs['proposal_id']), kwargs['accepted_value'])
         if self.mid in kwargs['accepted_value']:
-            self.prepare_migrate(kwargs['accepted_value'])
+            self.num_accepted += 1
+            # we cannot start migrating until we've heard back from everyone
+            # to whom we've sent an "Accept" message
+            if self.paxos_node.quorum_size == self.num_accepted:
+                self.prepare_migrate(kwargs['accepted_value'])
 
     def accept_handler(self, msg):
         '''
@@ -481,7 +487,7 @@ class Island(object):
                 self.mid_to_sockets[mid] = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
                 self.mid_to_sockets[mid].connect(mid_to_ports[mid])
                 # Set a timeout for 2 seconds
-                self.mid_to_sockets[mid].settimeout(2)
+                self.mid_to_sockets[mid].settimeout(5)
 
     def listen(self):
         '''
