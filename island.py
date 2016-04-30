@@ -150,11 +150,10 @@ class Island(object):
         :param migration_participants: participating islands in the migration
         :return: none
         '''
-        self.migration_participants = migration_participants
+        self.migration_participants = migration_participants[:]
         with self.status_lock:
             if self.status != IslandStatus.MIGRATION:
                 self.status = IslandStatus.MIGRATION
-                self.migration_id += 1
 
     '''
     MESSAGE HANDLERS
@@ -193,6 +192,7 @@ class Island(object):
         # if the island is not included in the list of participating islands,
         # the island cannot promise to participate...
         if self.mid not in kwargs['proposal_value']:
+            self.dprint("prepare rejected")
             return
         self.dprint("mid is in proposal value")
         # if this island has not heard back from all islands in the proposed migration, 
@@ -331,13 +331,13 @@ class Island(object):
 
 
                 if done or numresponses == 0:
-                    self.dprint("Got everyone's status")
+                    self.dprint("Got everyone's status: %s", mid_to_agents.keys())
                     with self.status_lock:
                         if self.status == IslandStatus.MIGRATION:
                             break
                         self.status = IslandStatus.MIGRATION_READY
                     # Start Paxos Ballot to start migration
-                    self.proposed_value = None
+                    self.paxos_node.proposed_value = None
                     self.paxos_node.set_proposal(mid_to_agents.keys())
                     self.paxos_node.change_quorum_size(max(len(mid_to_agents.keys())-1, 
                                                             self.paxos_node.quorum_size))
@@ -354,7 +354,7 @@ class Island(object):
                     if self.status == IslandStatus.MIGRATION:
                         break
                     if not done:
-                        self.status = IslandStatus.EVOLUTION_DONE
+                        self.dprint("Back to polling!")
 
             assert self.status == IslandStatus.MIGRATION
             # self.migration_participants is a list of islands that have ratified paxos proposal
@@ -366,6 +366,7 @@ class Island(object):
             for key in self.migration_participants:
                 self.all_agents += self.mid_to_agents[key] 
             self.run_migration()
+            self.migration_id += 1
 
     def run_epoch(self):
         '''
@@ -482,17 +483,22 @@ class Island(object):
         def process(sock):
             try:
                 while True:
-                    msg = decode_msg(recv_msg(sock))
+                    try:
+                        mm = recv_msg(sock)
+                        msg = decode_msg(mm)
+                    except Exception as e:
+                        self.dprint('ValueError: %s', mm, critical=True)
+                        raise e
                     self.dprint('Received %s', msg['action'].name)
 
                     if msg['kwargs']['migration_id'] != self.migration_id:
-                        self.dprint('Migration id mismatch (%d != %d), ignoring message', msg['kwargs']['migration_id'], self.migration_id)
+                        self.dprint('Migration id mismatch (%d != %d), ignoring message %s', msg['kwargs']['migration_id'], self.migration_id, msg)
                         continue
 
                     response = {}
                     if msg['action'] == Action.GETSTATUS:
                         response = self.get_status_handler(msg)
-                    if self.status == IslandStatus.MIGRATION_READY or self.status == IslandStatus.EVOLUTION_DONE:
+                    elif self.status == IslandStatus.MIGRATION_READY:
                         if msg['action'] == Action.SEND_PREPARE_NACK:
                             response = self.prepare_nack_handler(msg)
                         elif msg['action'] == Action.SEND_ACCEPT_NACK:
@@ -529,6 +535,6 @@ class Island(object):
             while True:
                 #accept connections from outside
                 clientsocket, address = self.mid_to_sockets[self.mid].accept()
-                process(clientsocket)
+                ct = thread.start_new_thread(process, (clientsocket,))
 
         thread.start_new_thread(loop, ())
