@@ -119,37 +119,34 @@ class PaxosMessenger(Messenger):
         self.island = island
 
     def send_prepare_nack(self, to_uid, proposal_id, promised_id):
-        msg = self.island.create_msg(Action.SEND_PREPARE_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
-        send_msg(self.mid_to_sockets[to_uid], msg)
+        self.island.rpc_call(to_uid, Action.SEND_PREPARE_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)
 
     def send_accept_nack(self, to_uid, proposal_id, promised_id):
-        msg = self.island.create_msg(Action.SEND_ACCEPT_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)#add stuff to this
-        send_msg(self.mid_to_sockets[to_uid], msg)
+        self.island.rpc_call(to_uid, Action.SEND_ACCEPT_NACK, from_uid=self.mid, to_uid=to_uid, proposal_id=proposal_id, promised_id=promised_id)
 
     def send_prepare(self, proposal_id, proposal_value):
-        msg = self.island.create_msg(Action.SEND_PREPARE, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
 
         self.island.dprint("Preparing proposal: %s %s", proposal_id, proposal_value)
-        for to_uid in self.mid_to_sockets:
+        mid_to_sockets = self.island.mid_to_sockets.keys()
+        for to_uid in mid_to_sockets:
             if to_uid != self.mid:
-                send_msg(self.mid_to_sockets[to_uid], msg)
+                self.island.rpc_call(to_uid, Action.SEND_PREPARE, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
 
     def send_promise(self, proposal_uid, proposal_id, previous_id, accepted_value):
-        msg = self.island.create_msg(Action.SEND_PROMISE, from_uid=self.mid, proposal_id=proposal_id, prev_accepted_id=previous_id, prev_accepted_value=accepted_value)
-        send_msg(self.mid_to_sockets[proposal_uid], msg)
+        self.island.rpc_call(proposal_uid, Action.SEND_PROMISE, from_uid=self.mid, proposal_id=proposal_id, prev_accepted_id=previous_id, prev_accepted_value=accepted_value)
+
 
     def send_accept(self, proposal_id, proposal_value):
-        msg = self.island.create_msg(Action.SEND_ACCEPT, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
         self.island.dprint('Accept sent')
-        for to_uid in self.mid_to_sockets:
+        for to_uid in self.island.mid_to_sockets:
             if to_uid != self.mid:
-                send_msg(self.mid_to_sockets[to_uid], msg)
+                self.island.rpc_call(to_uid, Action.SEND_ACCEPT, from_uid=self.mid, proposal_id=proposal_id, proposal_value=proposal_value)
 
     def send_accepted(self, proposal_id, accepted_value):
-        msg = self.island.create_msg(Action.SEND_ACCEPTED, from_uid=self.mid, proposal_id=proposal_id, accepted_value=accepted_value)
-        for to_uid in self.mid_to_sockets:
+        for to_uid in self.island.mid_to_sockets:
             if to_uid != self.mid:
-                send_msg(self.mid_to_sockets[to_uid], msg)
+                self.island.rpc_call(to_uid, Action.SEND_ACCEPTED, from_uid=self.mid, proposal_id=proposal_id, accepted_value=accepted_value)
+
         self.island.paxos_node.recv_accepted(self.mid, proposal_id, accepted_value)
 
     def on_resolution(self, proposal_id, proposal_value):

@@ -111,14 +111,14 @@ class Island(object):
             Causes this machine to die with some probability at any point
             This allows us to test machine failures.
             '''
-            p = 0.05
+            p = 0.03406
             while True:
-                time.sleep(1)
+                time.sleep(12)
                 if random.random() < p:
-                    self.dprint('PANIC PANIC PANIC PANIC!!!')
+                    self.dprint('\033[31mPANIC PANIC PANIC PANIC!!!\033[00m')
                     os._exit(1)
 
-        # thread.start_new_thread(die_thread, ())
+        thread.start_new_thread(die_thread, ())
 
     def create_msg(self, action, *args, **kwargs):
         '''
@@ -344,7 +344,7 @@ class Island(object):
                 with self.socket_lock:
                     # check to see if an island has died in the time since we've
                     # heard from the island
-                    mid_to_agents = self.mid_to_agents
+                    mid_to_agents = self.mid_to_agents.keys()
                     for mid in mid_to_agents:
                         if mid not in self.mid_to_sockets:
                             del self.mid_to_agents[mid]
@@ -356,14 +356,14 @@ class Island(object):
                             break
 
                 if done or numresponses == 0:
-                    self.dprint("Got everyone's status: %s", mid_to_agents.keys())
+                    self.dprint("Got everyone's status: %s", mid_to_agents)
                     with self.status_lock:
                         if self.status == IslandStatus.MIGRATION:
                             break
                         self.status = IslandStatus.MIGRATION_READY
                     # Start Paxos Ballot to start migration
-                    self.paxos_node.set_proposal(mid_to_agents.keys())
-                    self.paxos_node.change_quorum_size(max(len(mid_to_agents.keys())-1, 
+                    self.paxos_node.set_proposal(mid_to_agents)
+                    self.paxos_node.change_quorum_size(max(len(mid_to_agents)-1, 
                                                             self.paxos_node.quorum_size))
                     self.paxos_node.prepare()
 
@@ -425,7 +425,7 @@ class Island(object):
                     is done evolving)
         '''
 
-        resp = self.rpc_call(destination, Action.GETSTATUS)
+        resp = self.rpc_call(destination, Action.GETSTATUS, expect_response=True)
         if resp is not None:
             # return the AID and genotype of the Agent for the recipient island machine 
             # to store and potentially evolve
@@ -446,7 +446,7 @@ class Island(object):
         :param kwargs: additional (dict-type) arguments to the message
         :return: decoded response to the message
         '''
-        msg = self.create_msg(action)
+        msg = self.create_msg(action, *args, **kwargs)
         # self.dprint('Action %s sent to %d', action.name, destination)
         try:
             sock = None
@@ -456,17 +456,17 @@ class Island(object):
 
             if sock:
                 send_msg(sock, msg)
-                resp = recv_msg(sock)
+                if 'expect_response' in kwargs and kwargs['expect_response'] == True:
+                    resp = recv_msg(sock)
+                else:
+                    return None
             else:
                 raise RuntimeError()
-            try:
-                return decode_msg(resp)
-            except ValueError as e:
-                self.dprint(resp)
-                raise e
+
+            return decode_msg(resp)
         except socket.timeout:
             return None
-        except RuntimeError as e:
+        except (RuntimeError, socket.error) as e:
             with self.socket_lock:
                 try:
                     self.mid_to_sockets[destination].shutdown(socket.SHUT_RDWR)
@@ -513,13 +513,8 @@ class Island(object):
         def process(sock):
             try:
                 while True:
-                    try:
-                        mm = 'nothing yet'
-                        mm = recv_msg(sock)
-                        msg = decode_msg(mm)
-                    except Exception as e:
-                        self.dprint('ValueError: %s', mm, critical=True)
-                        raise e
+                    mm = recv_msg(sock)
+                    msg = decode_msg(mm)
                     # self.dprint('Received %s', msg['action'].name)
 
                     if msg['kwargs']['migration_id'] != self.migration_id:

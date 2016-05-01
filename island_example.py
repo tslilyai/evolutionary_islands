@@ -36,7 +36,7 @@ class FishAgent(Agent):
         return self.size > other.size
 
     def __repr__(self):
-        return 'FishAgent(%s, %s)' % (self.id, self.size)
+        return '><))*> (%s, %s)' % (self.id, self.size)
 
 class FishIsland(Island):
     '''
