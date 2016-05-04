@@ -8,18 +8,21 @@ import random
 import time
 import inspect
 import os
+import argparse
 
 from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
 
 from paxos.practical import Node, ProposalID
 from threading import Lock
 
+
 def mk_proposal_id(l):
     '''
     creates a proposal ID for a Paxos ballot to send
 
-    :param l: proposal label (either None or a pair of 
+    :param l: proposal list (either None or a list of 
               proposal_id, proposal_value)
+    :return: None or ProposalID
     '''
     if l is None:
         return l
@@ -83,7 +86,14 @@ class Island(object):
         self.mid = mid
         self.my_agents = my_agents
         self.all_agents = all_agents 
-        self.num_epochs = 10
+
+        # retrieve the command line argument for num_epochs if passed in
+        parser = argparse.ArgumentParser(description="island for a distributed evolutionary algorithm")
+        parser.add_argument('--num_epochs', dest='num_epochs', type=int, default=100)
+        parser.add_argument('--test_failures', dest='test_failures', type=bool, default=False)
+        args = parser.parse_args()
+        self.num_epochs = args.num_epochs
+        self.test_failures = args.test_failures
         self.mid_to_sockets = {}
         self.status = IslandStatus.IDLE
         self.migration_id = 0
@@ -105,20 +115,21 @@ class Island(object):
         self.num_accepted = 0
 
         self.dprint('Done Initializing')
+        
+        if self.test_failures:
+            def die_thread():
+                '''
+                Causes this machine to die with some probability at any point
+                This allows us to test machine failures.
+                '''
+                p = 0.03406
+                while True:
+                    time.sleep(12)
+                    if random.random() < p:
+                        self.dprint('\033[31mPANIC PANIC PANIC PANIC!!!\033[00m')
+                        os._exit(1)
 
-        def die_thread():
-            '''
-            Causes this machine to die with some probability at any point
-            This allows us to test machine failures.
-            '''
-            p = 0.03406
-            while True:
-                time.sleep(12)
-                if random.random() < p:
-                    self.dprint('\033[31mPANIC PANIC PANIC PANIC!!!\033[00m')
-                    os._exit(1)
-
-        thread.start_new_thread(die_thread, ())
+            thread.start_new_thread(die_thread, ())
 
     def create_msg(self, action, *args, **kwargs):
         '''
@@ -539,11 +550,12 @@ class Island(object):
                             response = self.accepted_handler(msg)
                     else:
                         self.dprint('Cannot handle message')
-                    
-                    # Force a timeout with probability 1% for testing purposes
-                    if random.random() < 0.01:
-                        # Oopsies network is slow
-                        time.sleep(1.5)
+                   
+                    if self.test_failures:
+                        # Force a timeout with probability 1% for testing purposes
+                        if random.random() < 0.01:
+                            # Oopsies network is slow
+                            time.sleep(1.5)
                     
                     if response:
                         send_msg(sock, response)
