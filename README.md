@@ -56,11 +56,11 @@ Each migration, every agent in each subpopulation will be sent to an island at r
     
 *Migrant Topology:* Migrants are distributed as follows:
 
-    - Each machine is associated with a unique machine ID (mid).
+- Each machine is associated with a unique machine ID (mid).
 
-    - During a migration, each machine sends to every other machine its ID and a list of its agents shuffled in a random order.
+- During a migration, each machine sends to every other machine its ID and a list of its agents shuffled in a random order.
 
-    - Once all the machines receive all lists, they select the nth subset of agents from each list to be the new agents on their island, where n is the position of the machine in a list of sorted mids.
+- Once all the machines receive all lists, they select the nth subset of agents from each list to be the new agents on their island, where n is the position of the machine in a list of sorted mids.
 
 ###Island State Machine
 
