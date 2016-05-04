@@ -11,7 +11,7 @@ Our code is general to any type of evolutionary algorithm that evolves a set of 
 
 To run the evolution, run `python island_example.py [--num_epochs 100] [--test_failures]`, replacing the file name with your own specific instantiations of the Island and Agents classes. 
 
-If test_failures is set, then an island will randomly die with some probability at any time to test machine crashes/failures. In addition, it will force a timeout during message responses with some random probability to test what happens should the network connection be slow.
+If `--test_failures` is set, then an island will randomly die with some probability at any time to test machine crashes/failures. In addition, it will force a timeout during message responses with some random probability to test what happens should the network connection be slow.
 
 When the system is run, each machine prints out messages (color-coded per machine) that describe the messages the machine is receiving or sending, and the migration status of the machine (including its migration ID).
 
@@ -55,15 +55,18 @@ Agents will be chosen at random to migrate.
 Each migration, every agent in each subpopulation will be sent to an island at random (which could be its current home island).
     
 *Migrant Topology:* Migrants are distributed as follows:
+
     - Each machine is associated with a unique machine ID (mid).
+
     - During a migration, each machine sends to every other machine its ID and a list of its agents shuffled in a random order.
+
     - Once all the machines receive all lists, they select the nth subset of agents from each list to be the new agents on their island, where n is the position of the machine in a list of sorted mids.
 
 ###Island State Machine
 
 An island transitions through the following states within its lifetime:
 
-1. *Evolving:* The island is currently running its $E$ epochs of evolution. During this time, the island ignores any migration proposals and does not interact with any other machines.
+1. *Evolving:* The island is currently running its E epochs of evolution. During this time, the island ignores any migration proposals and does not interact with any other machines.
 
 2. *Evolution Done:* The island has finished evolving its agents and is ready to migrate. During this time, the island queries all other island for their status to get an initial list of machines to include in its migration proposal. Once these queries have either received responses or have timed out, the island transitions to the ``Start Migration'' phase. Should the island receive any queries from other islands, the island will send out a list of its agents in a randomly shuffled order along with its status.
 
