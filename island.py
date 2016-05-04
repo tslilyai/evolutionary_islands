@@ -90,7 +90,7 @@ class Island(object):
         # retrieve the command line argument for num_epochs if passed in
         parser = argparse.ArgumentParser(description="island for a distributed evolutionary algorithm")
         parser.add_argument('--num_epochs', dest='num_epochs', type=int, default=100)
-        parser.add_argument('--test_failures', dest='test_failures', type=bool, default=False)
+        parser.add_argument('--test_failures', dest='test_failures', action='store_true')
         args = parser.parse_args()
         self.num_epochs = args.num_epochs
         self.test_failures = args.test_failures
