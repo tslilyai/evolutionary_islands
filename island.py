@@ -1,7 +1,3 @@
-import socket
-import json
-from enum import Enum
-
 import thread
 import sys
 import random
@@ -9,12 +5,24 @@ import time
 import inspect
 import os
 import argparse
-
-from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
-
-from paxos.practical import Node, ProposalID
 from threading import Lock
 
+# encoding/decoding moduldes
+import json
+from enum import Enum
+
+# Paxos and message-sending modules
+import socket
+from message import recv_msg, send_msg, decode_msg, create_msg, Action, PaxosMessenger
+from paxos.practical import Node, ProposalID
+
+'''
+island.py provides the Agent and Island classes. 
+
+These classes are interfaces which should be implemented
+for specific evolutionary island algorithms that
+evolve an agent population and require migrations.
+'''
 
 def mk_proposal_id(l):
     '''

@@ -113,6 +113,14 @@ def recv_msg(socket):
     return tot
 
 class PaxosMessenger(Messenger):
+    '''
+    PaxosMessenger implements the Paxos Messenger class 
+    using the Island class's network calls.
+    
+    The messenger is used to send ballots to start migration, 
+    and to reach a consensus on which islands are participating
+    in a migration.
+    '''
     def __init__(self, mid, mid_to_sockets, island):
         self.mid = mid
         self.mid_to_sockets = mid_to_sockets
